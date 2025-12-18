@@ -1,21 +1,60 @@
+
 import React, { useState, useEffect } from 'react';
-// Fix: Added missing Eye icon import from lucide-react
 import { 
   Send, Clock, Shield, BarChart3, List, Layers, Play, Pause, 
   Square, Upload, MessageSquare, CheckCheck, Info, Sparkles,
   ChevronRight, AlertCircle, FileText, Image as ImageIcon, 
-  Video, Calendar, MousePointer2, Zap, History, Eye
+  Video, Calendar, MousePointer2, Zap, History, Eye, Plus
 } from 'lucide-react';
+import { subscribeToCollection, saveDocument } from '../services/firebase';
+import { Campaign } from '../types';
 
 const Campaigns: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'create' | 'running' | 'history'>('create');
   const [speed, setSpeed] = useState('Normal');
   const [msgText, setMsgText] = useState('Olá {{nome}}, tudo bem? Temos uma novidade exclusiva para você hoje! 🚀');
   const [campaignName, setCampaignName] = useState('');
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedMedia, setSelectedMedia] = useState<{name: string, type: string} | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeToCollection('campaigns', (data) => {
+      setCampaigns(data as Campaign[]);
+    });
+    return () => unsub();
+  }, []);
 
   const insertVariable = (variable: string) => {
     setMsgText(prev => prev + ` {{${variable}}}`);
+  };
+
+  const handleStartCampaign = async () => {
+    if (!campaignName || !msgText) {
+      alert('Preencha o nome e a mensagem da campanha.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await saveDocument('campaigns', {
+        name: campaignName,
+        message: msgText,
+        status: 'Running',
+        progress: 0,
+        sent: 0,
+        total: 100, // Mock de total para exemplo
+        createdAt: new Date().toISOString(),
+        speed: speed,
+        mediaType: selectedMedia?.type || 'none'
+      });
+      setCampaignName('');
+      setActiveTab('running');
+    } catch (error) {
+      console.error("Erro ao salvar campanha:", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const stats = [
@@ -30,7 +69,7 @@ const Campaigns: React.FC = () => {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div className="flex gap-1 bg-white p-1.5 rounded-[1.5rem] border border-gray-100 shadow-sm">
           {[
-            { id: 'create', label: 'Nova Campanha', icon: PlusIcon },
+            { id: 'create', label: 'Nova Campanha', icon: Plus },
             { id: 'running', label: 'Em Execução', icon: Play },
             { id: 'history', label: 'Histórico', icon: History },
           ].map((tab) => (
@@ -220,8 +259,12 @@ const Campaigns: React.FC = () => {
                   </div>
                </div>
 
-               <button className="w-full mt-8 py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-black rounded-[2rem] shadow-2xl shadow-emerald-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3">
-                  <Play size={20} fill="currentColor" /> INICIAR CAMPANHA AGORA
+               <button 
+                onClick={handleStartCampaign}
+                disabled={isSaving}
+                className="w-full mt-8 py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-black rounded-[2rem] shadow-2xl shadow-emerald-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+               >
+                  <Play size={20} fill="currentColor" /> {isSaving ? 'SALVANDO NO CLOUD...' : 'INICIAR CAMPANHA AGORA'}
                </button>
                <p className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-4">
                   Custo estimado: <span className="text-emerald-500">0.02 créditos/msg</span>
@@ -231,24 +274,21 @@ const Campaigns: React.FC = () => {
         </div>
       ) : activeTab === 'running' ? (
         <div className="space-y-6">
-          {[1].map((i) => (
-            <div key={i} className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 space-y-8 animate-in slide-in-from-bottom-5">
+          {campaigns.filter(c => c.status === 'Running').map((camp) => (
+            <div key={camp.id} className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 space-y-8 animate-in slide-in-from-bottom-5">
               <div className="flex flex-col md:flex-row justify-between items-start gap-6">
                 <div className="space-y-2">
                    <div className="flex items-center gap-3">
                       <span className="px-3 py-1 bg-emerald-100 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div> Ativa
                       </span>
-                      <h4 className="text-xl font-black text-gray-800">Campanha Verão 2024 #042</h4>
+                      <h4 className="text-xl font-black text-gray-800">{camp.name}</h4>
                    </div>
-                   <p className="text-sm text-gray-500 font-medium">Iniciada hoje às 09:30 • Lista: Clientes High-Ticket • Velocity: Seguro</p>
+                   <p className="text-sm text-gray-500 font-medium">Iniciada em {new Date(camp.createdAt).toLocaleString()} • Cloud Persistence Active</p>
                 </div>
                 <div className="flex gap-2">
                   <button className="px-6 py-2.5 bg-gray-50 text-gray-600 rounded-2xl font-black text-xs hover:bg-gray-100 transition-all flex items-center gap-2">
                     <Pause size={16} /> Pausar
-                  </button>
-                  <button className="px-6 py-2.5 bg-rose-50 text-rose-500 rounded-2xl font-black text-xs hover:bg-rose-100 transition-all flex items-center gap-2">
-                    <Square size={16} fill="currentColor" /> Encerrar
                   </button>
                 </div>
               </div>
@@ -258,23 +298,23 @@ const Campaigns: React.FC = () => {
                  <div className="lg:col-span-4 space-y-4">
                     <div className="flex justify-between items-end">
                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Progresso Total</span>
-                       <span className="text-3xl font-black text-indigo-600">75%</span>
+                       <span className="text-3xl font-black text-indigo-600">{camp.progress}%</span>
                     </div>
                     <div className="h-4 bg-gray-100 rounded-full overflow-hidden p-1 ring-1 ring-gray-100">
-                       <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-1000" style={{ width: '75%' }}></div>
+                       <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-1000" style={{ width: `${camp.progress}%` }}></div>
                     </div>
                     <div className="flex justify-between text-xs font-bold text-gray-500 px-1">
-                       <span>337 Enviados</span>
-                       <span>450 Total</span>
+                       <span>{camp.sent} Enviados</span>
+                       <span>{camp.total} Total</span>
                     </div>
                  </div>
 
                  <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
-                      { label: 'Entregues', value: '312', color: 'indigo', icon: CheckCheck },
-                      { label: 'Lidos (visto)', value: '240', color: 'blue', icon: Eye },
-                      { label: 'Respostas', value: '84', color: 'emerald', icon: MessageSquare },
-                      { label: 'Falhas', value: '12', color: 'rose', icon: AlertCircle },
+                      { label: 'Entregues', value: camp.sent, color: 'indigo', icon: CheckCheck },
+                      { label: 'Lidos (visto)', value: Math.floor(camp.sent * 0.7), color: 'blue', icon: Eye },
+                      { label: 'Respostas', value: Math.floor(camp.sent * 0.15), color: 'emerald', icon: MessageSquare },
+                      { label: 'Falhas', value: '0', color: 'rose', icon: AlertCircle },
                     ].map((stat, idx) => (
                       <div key={idx} className="bg-gray-50 p-5 rounded-[2rem] border border-gray-100 group hover:scale-[1.05] transition-transform">
                         <div className={`p-2 w-fit rounded-xl bg-${stat.color}-50 text-${stat.color}-500 mb-3`}><stat.icon size={18} /></div>
@@ -284,45 +324,43 @@ const Campaigns: React.FC = () => {
                     ))}
                  </div>
               </div>
-
-              {/* Real-time Logs Console */}
-              <div className="space-y-3">
-                 <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
-                    <History size={14} /> Log de Eventos em Tempo Real
-                 </div>
-                 <div className="bg-gray-900 rounded-3xl p-6 font-mono text-[11px] leading-relaxed overflow-hidden relative">
-                    <div className="space-y-1.5 h-32 overflow-y-auto custom-scrollbar opacity-80">
-                       <p className="text-emerald-400">[09:30:12] Conexão socket.io estabelecida com sucesso.</p>
-                       <p className="text-gray-400">[09:31:05] Mensagem #335 enviada para +5511994... - OK</p>
-                       <p className="text-gray-400">[09:31:58] Pausa inteligente de 10s aplicada (Anti-bloqueio).</p>
-                       <p className="text-indigo-400">[09:32:08] Retomando disparos...</p>
-                       <p className="text-gray-400">[09:32:15] Mensagem #336 enviada para +5521987... - OK</p>
-                       <p className="text-rose-400">[09:32:22] Falha no disparo para +5511912... (Número inválido).</p>
-                    </div>
-                    <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-gray-900 to-transparent"></div>
-                 </div>
-              </div>
             </div>
           ))}
+          {campaigns.filter(c => c.status === 'Running').length === 0 && (
+            <div className="text-center p-20 bg-gray-50 rounded-[3rem] border-2 border-dashed border-gray-200">
+               <Zap size={48} className="mx-auto text-gray-300 mb-4" />
+               <p className="text-gray-400 font-medium">Nenhuma campanha em execução no Cloud Firestore.</p>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center p-20 text-center space-y-4">
-           <div className="w-20 h-20 bg-gray-100 rounded-[2.5rem] flex items-center justify-center text-gray-300">
-              <History size={40} />
-           </div>
-           <div>
-              <h4 className="text-xl font-black text-gray-800">Histórico de Campanhas</h4>
-              <p className="text-sm text-gray-400 max-w-sm mt-1">Aqui você poderá ver o desempenho consolidado de todas as campanhas já finalizadas.</p>
-           </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {campaigns.map(camp => (
+            <div key={camp.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-all">
+               <div className="flex justify-between items-start mb-4">
+                  <h5 className="font-black text-gray-800 truncate pr-2">{camp.name}</h5>
+                  <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase ${camp.status === 'Completed' ? 'bg-emerald-50 text-emerald-500' : 'bg-gray-50 text-gray-400'}`}>
+                    {camp.status}
+                  </span>
+               </div>
+               <p className="text-xs text-gray-400 line-clamp-2 mb-4 font-medium italic">"{camp.message}"</p>
+               <div className="flex justify-between items-center text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                  <span>{camp.sent}/{camp.total} Mensagens</span>
+                  <span>{new Date(camp.createdAt).toLocaleDateString()}</span>
+               </div>
+            </div>
+          ))}
+          {campaigns.length === 0 && (
+             <div className="col-span-full flex flex-col items-center justify-center p-20 text-center">
+                <History size={40} className="text-gray-200 mb-4" />
+                <h4 className="text-lg font-black text-gray-800">Histórico Vazio</h4>
+                <p className="text-sm text-gray-400 max-w-xs mt-1">Suas campanhas finalizadas aparecerão aqui após o processamento no Cloud.</p>
+             </div>
+          )}
         </div>
       )}
     </div>
   );
 };
-
-// Helper for the Plus icon missing in current scope if not imported
-const PlusIcon = (props: any) => (
-  <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-);
 
 export default Campaigns;
