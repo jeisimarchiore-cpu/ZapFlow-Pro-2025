@@ -17,22 +17,21 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Estado global de conexão
   const [isConnected, setIsConnected] = useState(false);
   const [isSocketActive, setIsSocketActive] = useState(false);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
 
   useEffect(() => {
-    // Monitora status real do socket globalmente
-    const handleStatus = (status: string) => {
+    const handleSocketStatus = (status: string) => {
       setIsSocketActive(status === 'connected');
     };
     
+    // Configurar ouvintes antes de conectar
+    socketService.on('socket_status', handleSocketStatus);
     socketService.connect();
-    socketService.on('status', handleStatus);
     
     return () => {
-      socketService.off('status', handleStatus);
+      socketService.off('socket_status', handleSocketStatus);
     };
   }, []);
 
@@ -46,6 +45,7 @@ const App: React.FC = () => {
       case 'connection': return (
         <Connection 
           isConnected={isConnected} 
+          isSocketActive={isSocketActive}
           onConnectionChange={(connected, photo) => {
             setIsConnected(connected);
             setUserPhoto(photo);

@@ -3,12 +3,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   QrCode, RefreshCw, Smartphone, Battery, Signal, 
   CheckCircle2, AlertCircle, Zap, ShieldCheck, 
-  Terminal, Server, LogOut, Activity, Wifi, WifiOff 
+  Terminal, Server, LogOut, Activity, Wifi, WifiOff,
+  ChevronRight, Info
 } from 'lucide-react';
 import { socketService } from '../services/socket';
 
 interface ConnectionProps {
   isConnected: boolean;
+  isSocketActive: boolean;
   onConnectionChange: (connected: boolean, photo: string | null) => void;
 }
 
@@ -18,7 +20,7 @@ interface SystemLog {
   message: string;
 }
 
-const Connection: React.FC<ConnectionProps> = ({ isConnected, onConnectionChange }) => {
+const Connection: React.FC<ConnectionProps> = ({ isConnected, isSocketActive, onConnectionChange }) => {
   const [status, setStatus] = useState<'loading' | 'qr' | 'connected' | 'error'>(isConnected ? 'connected' : 'loading');
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState('Aguardando pareamento...');
@@ -39,13 +41,13 @@ const Connection: React.FC<ConnectionProps> = ({ isConnected, onConnectionChange
       onConnectionChange(true, info.profilePicUrl);
     };
 
-    const handleServerStatus = (s: string) => {
+    const handleWhatsappStatus = (s: string) => {
       if (s === "CONNECTED") setStatus('connected');
       if (s === "QR_READY") setStatus('qr');
-      if (s === "DISCONNECTED") {
+      if (s === "DISCONNECTED" || s === "INITIALIZING") {
         setStatus('loading');
         setQrCode(null);
-        onConnectionChange(false, null);
+        if (s === "DISCONNECTED") onConnectionChange(false, null);
       }
       if (s === "AUTH_FAILURE") setStatus('error');
     };
@@ -56,18 +58,20 @@ const Connection: React.FC<ConnectionProps> = ({ isConnected, onConnectionChange
 
     socketService.on("qr", handleQr);
     socketService.on("ready", handleReady);
-    socketService.on("server_status", handleServerStatus);
+    socketService.on("whatsapp_status", handleWhatsappStatus);
     socketService.on("log", handleLog);
-
-    socketService.connect();
 
     return () => {
       socketService.off("qr", handleQr);
       socketService.off("ready", handleReady);
-      socketService.off("server_status", handleServerStatus);
+      socketService.off("whatsapp_status", handleWhatsappStatus);
       socketService.off("log", handleLog);
     };
   }, []);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
 
   const handleLogout = () => {
     if (confirm("Deseja realmente desconectar este dispositivo do servidor?")) {
@@ -75,34 +79,71 @@ const Connection: React.FC<ConnectionProps> = ({ isConnected, onConnectionChange
     }
   };
 
+  const handleReconnect = () => {
+    socketService.disconnect();
+    socketService.connect();
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
       <div className="text-center space-y-3">
         <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100">
-           <Activity size={12} className="animate-pulse" /> Sincronia de Instância Port:8000
+           <Activity size={12} className={isSocketActive ? "animate-pulse" : ""} /> 
+           {isSocketActive ? "Sincronizado Port:8000" : "Servidor Desconectado"}
         </div>
         <h2 className="text-4xl font-black text-gray-800 tracking-tight">Vincular Dispositivo</h2>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-5 bg-white p-8 rounded-[3rem] shadow-xl border border-gray-100 flex flex-col items-center justify-center space-y-8 relative overflow-hidden group">
+        {/* Lado Esquerdo: QR / Status */}
+        <div className="lg:col-span-5 bg-white p-8 rounded-[3rem] shadow-xl border border-gray-100 flex flex-col items-center justify-center space-y-8 relative overflow-hidden">
           <div className={`absolute top-0 left-0 w-full h-2 transition-all duration-1000 ${
-            status === 'connected' ? 'bg-emerald-500' : status === 'error' ? 'bg-rose-500' : 'bg-indigo-600 animate-pulse'
+            status === 'connected' ? 'bg-emerald-500' : !isSocketActive ? 'bg-rose-500' : 'bg-indigo-600 animate-pulse'
           }`}></div>
 
-          {status === 'connected' ? (
+          {!isSocketActive ? (
+            <div className="text-center space-y-6 py-10 w-full">
+              <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-[2rem] flex items-center justify-center mx-auto shadow-lg border border-rose-100">
+                <WifiOff size={40} />
+              </div>
+              <div className="space-y-3">
+                <h3 className="text-xl font-black text-gray-800 uppercase tracking-tight">Servidor Offline</h3>
+                <p className="text-sm text-gray-500 font-medium px-4">
+                  O painel não conseguiu se comunicar com o motor na porta 8000.
+                </p>
+                <div className="bg-gray-50 p-4 rounded-2xl text-left border border-gray-100 space-y-2">
+                   <p className="text-[10px] font-black text-gray-400 uppercase">Como resolver:</p>
+                   <ul className="text-xs font-bold text-gray-600 space-y-1.5">
+                     <li className="flex items-center gap-2 text-indigo-600"><ChevronRight size={12}/> Execute o servidor com "node index.js"</li>
+                     <li className="flex items-center gap-2"><ChevronRight size={12}/> Verifique se a porta 8000 está livre</li>
+                     <li className="flex items-center gap-2"><ChevronRight size={12}/> Tente desativar o firewall local</li>
+                   </ul>
+                </div>
+              </div>
+              <button 
+                onClick={handleReconnect}
+                className="w-full flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+              >
+                <RefreshCw size={16} /> Tentar Reconectar
+              </button>
+            </div>
+          ) : status === 'connected' ? (
             <div className="w-full flex flex-col items-center space-y-8 py-6">
               <div className="relative">
                 <div className="w-36 h-36 rounded-[3.5rem] bg-emerald-500 p-1 shadow-2xl rotate-3">
-                   <img src={deviceInfo?.profilePicUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde"} className="w-full h-full rounded-[3.2rem] object-cover border-4 border-white" alt="Profile" />
+                   <img 
+                    src={deviceInfo?.profilePicUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde"} 
+                    className="w-full h-full rounded-[3.2rem] object-cover border-4 border-white" 
+                    alt="Profile" 
+                   />
                 </div>
-                <div className="absolute -bottom-2 -right-2 bg-white p-2.5 rounded-2xl shadow-xl ring-4 ring-emerald-50">
-                   <CheckCircle2 size={28} className="text-emerald-500" />
+                <div className="absolute -bottom-2 -right-2 bg-white p-2.5 rounded-2xl shadow-xl ring-4 ring-emerald-50 text-emerald-500">
+                   <CheckCircle2 size={28} />
                 </div>
               </div>
               <div className="text-center">
                 <h4 className="text-2xl font-black text-gray-800">{deviceName}</h4>
-                <p className="text-emerald-500 font-black text-[10px] uppercase tracking-[0.2em] mt-1">Platform: {deviceInfo?.platform || 'Web'}</p>
+                <p className="text-emerald-500 font-black text-[10px] uppercase tracking-[0.2em] mt-1">Sessão Ativa</p>
               </div>
               <button 
                 onClick={handleLogout}
@@ -115,32 +156,59 @@ const Connection: React.FC<ConnectionProps> = ({ isConnected, onConnectionChange
             <div className="w-full space-y-8">
               <div className="bg-gray-50 p-6 rounded-[2.5rem] border-4 border-dashed border-gray-100 flex items-center justify-center min-h-[350px] relative">
                 {status === 'qr' && qrCode ? (
-                  <img src={qrCode} alt="WhatsApp QR" className="w-64 h-64 p-2 bg-white rounded-2xl shadow-lg animate-in zoom-in" />
+                  <div className="bg-white p-4 rounded-3xl shadow-2xl animate-in zoom-in duration-500">
+                    <img src={qrCode} alt="WhatsApp QR" className="w-64 h-64" />
+                  </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-4">
+                  <div className="flex flex-col items-center gap-4 text-center">
                     <RefreshCw className="text-indigo-600 animate-spin" size={48} />
-                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Iniciando Client...</p>
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Iniciando Driver...</p>
+                      <p className="text-[9px] text-gray-400 font-bold uppercase">Aguardando resposta do servidor</p>
+                    </div>
                   </div>
                 )}
+              </div>
+              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3 items-start animate-in slide-in-from-bottom-2">
+                <Info size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] font-bold text-amber-700 leading-relaxed uppercase">
+                  Escaneie o QR Code usando o WhatsApp > Configurações > Dispositivos Conectados.
+                </p>
               </div>
             </div>
           )}
         </div>
 
+        {/* Lado Direito: Logs */}
         <div className="lg:col-span-7 bg-gray-900 rounded-[3rem] shadow-2xl p-8 flex flex-col relative overflow-hidden min-h-[450px]">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-white font-black text-sm uppercase tracking-widest flex items-center gap-3">
-              <Terminal size={18} className="text-indigo-400" /> WhatsApp Console Log
+              <Terminal size={18} className="text-indigo-400" /> Console de Diagnóstico
             </h3>
+            <button 
+              onClick={() => setLogs([])}
+              className="text-[9px] font-black text-gray-500 uppercase hover:text-white transition-colors"
+            >
+              Limpar
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto font-mono text-[11px] space-y-2 custom-scrollbar pr-4">
+            {logs.length === 0 && (
+              <p className="text-gray-600 italic">Monitorando comunicação com porta 8000...</p>
+            )}
             {logs.map((log) => (
-              <div key={log.id} className="flex gap-4">
-                <span className="text-indigo-500 font-bold">[{log.time}]</span>
-                <span className="text-gray-300">{log.message}</span>
+              <div key={log.id} className="flex gap-4 animate-in slide-in-from-left duration-300">
+                <span className="text-indigo-500 font-bold shrink-0">[{log.time}]</span>
+                <span className="text-gray-300 leading-relaxed">{log.message}</span>
               </div>
             ))}
             <div ref={logEndRef} />
+          </div>
+          <div className="mt-4 pt-4 border-t border-white/5 flex items-center gap-3">
+            <div className={`w-2.5 h-2.5 rounded-full ${isSocketActive ? 'bg-emerald-500 shadow-emerald-500/50' : 'bg-rose-500 shadow-rose-500/50'} shadow-lg`}></div>
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+              Status do Host: {isSocketActive ? 'ONLINE' : 'OFFLINE'}
+            </span>
           </div>
         </div>
       </div>

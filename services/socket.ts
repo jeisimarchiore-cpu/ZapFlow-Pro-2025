@@ -10,47 +10,52 @@ class SocketService {
   connect() {
     if (this.socket?.connected) return;
 
+    this.addLog(`Iniciando tentativa de conexão em: ${SOCKET_URL}`);
+    this.emitInternal("socket_status", "connecting");
+
     this.socket = io(SOCKET_URL, {
       transports: ["polling", "websocket"],
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 5000,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 2000,
+      timeout: 10000,
     });
 
     this.socket.on("connect", () => {
-      this.addLog("Handshake estabelecido com o motor ZapFlow.");
-      this.emitInternal("status", "connected");
+      this.addLog("✅ Conectado ao servidor Node.js (Porta 8000)");
+      this.emitInternal("socket_status", "connected");
+      // Solicita QR assim que o socket conecta
       this.socket?.emit("request_qr");
     });
 
-    // Mapeamento exato com o backend fornecido
     this.socket.on("qr_code", (qr: string) => {
-      this.addLog("Novo QR Code recebido do servidor.");
+      this.addLog("📸 QR Code recebido do motor.");
       this.emitInternal("qr", qr);
     });
 
     this.socket.on("status", (s: string) => {
-      this.addLog(`Status da Instância: ${s}`);
-      this.emitInternal("server_status", s);
+      this.addLog(`📡 Status do WhatsApp: ${s}`);
+      this.emitInternal("whatsapp_status", s);
     });
 
     this.socket.on("connection_data", (info: any) => {
-      this.addLog(`Dados da sessão sincronizados: ${info.name}`);
+      this.addLog(`👤 Autenticado como: ${info.name || 'Usuário'}`);
       this.emitInternal("ready", info);
+    });
+
+    this.socket.on("connect_error", (err) => {
+      this.addLog(`❌ Erro de rede: ${err.message}. Verifique se o servidor Node está rodando.`);
+      this.emitInternal("socket_status", "disconnected");
+    });
+
+    this.socket.on("disconnect", (reason) => {
+      this.addLog(`⚠️ Desconectado do servidor: ${reason}`);
+      this.emitInternal("socket_status", "disconnected");
     });
 
     this.socket.on("new_message", (data: any) => {
       this.emitInternal("message", data);
-    });
-
-    this.socket.on("campaign_progress_update", (progress: any) => {
-      this.emitInternal("campaign_update", progress);
-    });
-
-    this.socket.on("disconnect", (reason) => {
-      this.addLog(`Socket desconectado: ${reason}`);
-      this.emitInternal("status", "disconnected");
     });
   }
 
@@ -81,19 +86,20 @@ class SocketService {
 
   sendMessage(to: string, text: string) {
     if (this.socket?.connected) {
-      // O backend usa POST /api/send-message ou socket emit?
-      // O server.js fornecido emite 'new_message' mas não tem listener 'message' para envio
-      // Vamos usar a API REST para maior confiabilidade de envio conforme o server.js
       fetch(`${SOCKET_URL}/api/send-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ number: to, message: text })
-      });
+      }).catch(e => this.addLog(`Erro ao enviar mensagem: ${e.message}`));
+    } else {
+      this.addLog("❌ Impossível enviar: Sem conexão com o servidor.");
     }
   }
 
   logout() {
-    fetch(`${SOCKET_URL}/api/session/clear`, { method: 'POST' });
+    this.addLog("Solicitando desconexão total...");
+    fetch(`${SOCKET_URL}/api/session/clear`, { method: 'POST' })
+      .catch(e => this.addLog(`Erro ao limpar sessão: ${e.message}`));
   }
 
   disconnect() {
