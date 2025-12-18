@@ -1,8 +1,6 @@
 
 import { io, Socket } from "socket.io-client";
 
-// URL do seu servidor backend Node.js (Baileys/WPPConnect)
-// Altere para o IP do seu servidor em produção
 const SOCKET_URL = "http://localhost:3001"; 
 
 class SocketService {
@@ -10,13 +8,17 @@ class SocketService {
   private listeners: {[key: string]: Function[]} = {};
 
   connect() {
+    if (this.socket?.connected) return;
+
     this.socket = io(SOCKET_URL, {
       transports: ["websocket"],
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 5000,
     });
 
     this.socket.on("connect", () => {
-      console.log("Conectado ao servidor de Sockets");
       this.emitInternal("status", "connected");
     });
 
@@ -35,11 +37,21 @@ class SocketService {
     this.socket.on("disconnect", () => {
       this.emitInternal("status", "disconnected");
     });
+
+    this.socket.on("connect_error", (err) => {
+      console.error("Erro de conexão socket:", err);
+      this.emitInternal("error", err);
+    });
   }
 
   on(event: string, callback: Function) {
     if (!this.listeners[event]) this.listeners[event] = [];
     this.listeners[event].push(callback);
+  }
+
+  off(event: string, callback: Function) {
+    if (!this.listeners[event]) return;
+    this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
   }
 
   private emitInternal(event: string, data: any) {
@@ -49,8 +61,17 @@ class SocketService {
   }
 
   sendMessage(to: string, text: string) {
-    if (this.socket) {
+    if (this.socket?.connected) {
       this.socket.emit("send_message", { to, text });
+    } else {
+      console.warn("Socket não conectado. Mensagem não enviada.");
+    }
+  }
+
+  disconnect() {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
     }
   }
 }

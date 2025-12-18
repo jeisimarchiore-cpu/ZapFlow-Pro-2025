@@ -21,41 +21,54 @@ const ChatCenter: React.FC = () => {
   const [showContactInfo, setShowContactInfo] = useState(true);
   const [inputText, setInputText] = useState('');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
-  const [messages, setMessages] = useState([
-    { id: '1', text: 'Pode me enviar o boleto de pagamento deste mês? Por favor.', sender: 'user', time: '10:45' },
-    { id: '2', text: 'Claro, João! Estou gerando agora mesmo para você. Só um momento.', sender: 'agent', time: '10:46' },
-  ]);
+  const [messages, setMessages] = useState<any[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const selectedChat = mockChats.find(c => c.id === selectedId);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Escuta mensagens reais via Socket
+  // Carrega histórico mock ao selecionar chat
   useEffect(() => {
-    const handleMessage = (msg: any) => {
-      // Se a mensagem for de um contato real, adicionamos ao fluxo
-      const newMessage = {
-        id: Date.now().toString(),
-        text: msg.text || msg.body || "",
-        sender: 'user' as const,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      
-      if (newMessage.text) {
-        setMessages(prev => [...prev, newMessage]);
+    if (selectedId === '1') {
+      setMessages([
+        { id: '1', text: 'Pode me enviar o boleto de pagamento deste mês? Por favor.', sender: 'user', time: '10:45' },
+        { id: '2', text: 'Claro, João! Estou gerando agora mesmo para você. Só um momento.', sender: 'agent', time: '10:46' },
+      ]);
+    } else {
+      setMessages([]);
+    }
+  }, [selectedId]);
+
+  // Listener de mensagens do Socket com limpeza (Cleanup)
+  useEffect(() => {
+    const handleIncomingMessage = (msg: any) => {
+      // Regra de Ouro: Só adiciona à tela se o remetente for o chat aberto no momento
+      if (selectedChat && (msg.from === selectedChat.phone || msg.sender === selectedChat.phone)) {
+        const newMessage = {
+          id: Date.now().toString(),
+          text: msg.text || msg.body || "",
+          sender: 'user' as const,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        
+        if (newMessage.text) {
+          setMessages(prev => [...prev, newMessage]);
+        }
+      } else {
+        // Aqui você poderia atualizar o contador de "Não Lidas" no estado global
+        console.log("Mensagem recebida para outro contato:", msg.from);
       }
     };
 
-    socketService.on("message", handleMessage);
+    socketService.on("message", handleIncomingMessage);
     
     return () => {
-      // Idealmente o SocketService deveria permitir remover listeners específicos
+      socketService.off("message", handleIncomingMessage);
     };
-  }, []);
-
-  const selectedChat = mockChats.find(c => c.id === selectedId);
+  }, [selectedChat]);
 
   const handleAiSuggest = async () => {
     if (!selectedChat) return;
@@ -69,23 +82,19 @@ const ChatCenter: React.FC = () => {
   };
 
   const handleSendMessage = () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || !selectedChat) return;
     
-    // Envia via Socket REAL
-    if (selectedChat) {
-      socketService.sendMessage(selectedChat.phone, inputText);
-      
-      const newMessage = {
-        id: Date.now().toString(),
-        text: inputText,
-        sender: 'agent' as const,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages([...messages, newMessage]);
-      setInputText('');
-    } else {
-      alert("Selecione um chat para enviar mensagens via socket.");
-    }
+    // Disparo Real via Socket
+    socketService.sendMessage(selectedChat.phone, inputText);
+    
+    const newMessage = {
+      id: Date.now().toString(),
+      text: inputText,
+      sender: 'agent' as const,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, newMessage]);
+    setInputText('');
   };
 
   return (
@@ -100,7 +109,7 @@ const ChatCenter: React.FC = () => {
           <div className="flex items-center justify-between">
             <h3 className="font-black text-2xl text-gray-800 tracking-tight">Chats Live</h3>
             <div className="flex gap-2">
-               <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-lg shadow-emerald-200" title="Socket Online"></div>
+               <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-lg shadow-emerald-200" title="Socket Ativo"></div>
                <button className="p-2 bg-white text-gray-400 hover:text-indigo-600 rounded-xl shadow-sm transition-all border border-gray-100">
                 <UserPlus size={18}/>
                </button>
@@ -185,7 +194,7 @@ const ChatCenter: React.FC = () => {
                   <h4 className="font-black text-gray-800 text-lg tracking-tight truncate">{selectedChat.name}</h4>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-emerald-500 font-black uppercase tracking-widest flex items-center gap-1">
-                      <Zap size={10} fill="currentColor" /> Live WebSocket
+                      <Zap size={10} fill="currentColor" /> Túnel WebSocket
                     </span>
                     <span className="text-gray-200">|</span>
                     <span className="text-[10px] text-gray-400 font-bold">+{selectedChat.phone}</span>
@@ -209,7 +218,7 @@ const ChatCenter: React.FC = () => {
               <div className="flex-1 flex flex-col relative overflow-hidden bg-[url('https://web.whatsapp.com/img/bg-chat-tile-light_04fcacde533c5e444d4d0f058aef2d0c.png')] bg-repeat">
                 <div className="flex-1 p-6 md:p-10 overflow-y-auto space-y-6 custom-scrollbar bg-gray-50/90 backdrop-blur-[2px]">
                   <div className="flex justify-center">
-                    <span className="bg-white/80 backdrop-blur shadow-sm px-4 py-1.5 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest border border-gray-100">Criptografia Ponta-a-Ponta</span>
+                    <span className="bg-white/80 backdrop-blur shadow-sm px-4 py-1.5 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest border border-gray-100">Criptografia Real-Time</span>
                   </div>
                   
                   {messages.map((msg) => (
@@ -219,7 +228,7 @@ const ChatCenter: React.FC = () => {
                         ? 'bg-white border-gray-100 rounded-tl-none' 
                         : 'bg-indigo-600 text-white border-transparent rounded-tr-none shadow-indigo-100 shadow-xl'
                       }`}>
-                        <p className="text-sm leading-relaxed">{msg.text}</p>
+                        <p className="text-sm leading-relaxed font-medium">{msg.text}</p>
                       </div>
                       <div className={`flex items-center gap-1.5 mt-1.5 px-2 ${msg.sender === 'user' ? '' : 'flex-row-reverse'}`}>
                          <span className="text-[9px] font-bold text-gray-400 uppercase">{msg.time}</span>
@@ -235,7 +244,7 @@ const ChatCenter: React.FC = () => {
                   <div className="mx-6 mb-2 p-4 bg-indigo-600 text-white rounded-2xl shadow-xl flex items-center justify-between animate-pulse">
                      <div className="flex items-center gap-3">
                         <Sparkles size={18} className="animate-spin duration-[3s]" />
-                        <span className="text-xs font-bold uppercase tracking-widest">IA Analisando Fluxo Real...</span>
+                        <span className="text-xs font-bold uppercase tracking-widest">IA Gerando Resposta Live...</span>
                      </div>
                   </div>
                 )}
@@ -243,7 +252,6 @@ const ChatCenter: React.FC = () => {
                 {/* Input Area */}
                 <div className="p-6 bg-white/80 backdrop-blur-md border-t border-gray-100">
                   <div className="flex flex-col gap-4">
-                    {/* Quick Response Toolbar */}
                     <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar no-scrollbar">
                        <button 
                         onClick={handleAiSuggest}
@@ -267,7 +275,7 @@ const ChatCenter: React.FC = () => {
                       <div className="flex-1 relative">
                         <input 
                           type="text" 
-                          placeholder="Digite para disparar via Socket..." 
+                          placeholder="Digite aqui para enviar via WebSocket..." 
                           value={inputText}
                           onChange={(e) => setInputText(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
@@ -306,7 +314,7 @@ const ChatCenter: React.FC = () => {
 
                      <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-3">
                         <div className="flex justify-between items-center">
-                           <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Health Score</span>
+                           <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Conversão Score</span>
                            <span className={`text-xs font-black text-emerald-500`}>{selectedChat.score}%</span>
                         </div>
                         <div className="w-full h-2 bg-white rounded-full overflow-hidden shadow-inner">
@@ -332,8 +340,8 @@ const ChatCenter: React.FC = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <h4 className="text-2xl font-black text-gray-800 tracking-tight">Painel de Sincronia Live</h4>
-              <p className="text-gray-400 text-sm max-w-xs mx-auto font-medium">As mensagens aparecerão aqui em tempo real assim que seu socket Node.js detectar novas interações.</p>
+              <h4 className="text-2xl font-black text-gray-800 tracking-tight">Console de Atendimento</h4>
+              <p className="text-gray-400 text-sm max-w-xs mx-auto font-medium">As mensagens recebidas via Socket.io aparecerão aqui instantaneamente.</p>
             </div>
           </div>
         )}
