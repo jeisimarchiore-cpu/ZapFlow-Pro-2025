@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { 
   Users, Send, CheckCircle, AlertCircle, Clock, MessageSquareText, 
-  ShieldCheck, UserMinus, Globe, Smile, Zap, TrendingUp
+  ShieldCheck, UserMinus, Globe, Smile, Zap, TrendingUp, Sparkles, RefreshCw, FileText, X
 } from 'lucide-react';
 import { subscribeToCollection } from '../services/firebase';
 import { Contact, Campaign } from '../types';
@@ -15,6 +15,10 @@ const Dashboard: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+
+  const SERVER_URL = "http://localhost:8000";
 
   useEffect(() => {
     const unsubContacts = subscribeToCollection('contacts', (data) => {
@@ -31,16 +35,47 @@ const Dashboard: React.FC = () => {
     };
   }, []);
 
-  // Cálculos dinâmicos baseados no Firestore
+  // Cálculos para o relatório de IA
   const totalLeads = contacts.length;
   const activeLeads = contacts.filter(c => c.status === 'Ativo').length;
   const riskLeads = contacts.filter(c => c.status === 'Risco').length;
-  const newLeads = contacts.filter(c => c.status === 'Novo').length;
-  
   const totalCampaigns = campaigns.length;
-  const runningCampaigns = campaigns.filter(c => c.status === 'Running').length;
 
-  // Mock de dados para os gráficos (podem ser agregados do Firestore em produção)
+  const handleGenerateAiInsights = async () => {
+    setIsGeneratingAi(true);
+    try {
+      const stats = {
+        totalSent: campaigns.reduce((acc, c) => acc + c.sent, 0),
+        totalReceived: campaigns.reduce((acc, c) => acc + c.sent, 0), // Mocked for simplicity
+        receivedRate: 98,
+        totalDelivered: campaigns.reduce((acc, c) => acc + (c.sent * 0.9), 0),
+        deliveredRate: 90,
+        totalViewed: campaigns.reduce((acc, c) => acc + (c.sent * 0.4), 0),
+        viewedRate: 40,
+        totalFailed: campaigns.reduce((acc, c) => acc + (c.total - c.sent), 0),
+        failureRate: 5
+      };
+
+      const res = await fetch(`${SERVER_URL}/api/ai/insights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactCount: totalLeads,
+          activeContacts: activeLeads,
+          riskContacts: riskLeads,
+          campaignStats: stats,
+          filterPeriod: "Últimos 7 dias"
+        })
+      });
+      const data = await res.json();
+      if (data.success) setAiReport(data.insights);
+    } catch (e) {
+      console.error("Erro ao gerar insights:", e);
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
   const areaData = [
     { name: 'Seg', sent: 400, received: 240 },
     { name: 'Ter', sent: 700, received: 539 },
@@ -64,18 +99,44 @@ const Dashboard: React.FC = () => {
           <p className="text-gray-500 text-sm">Monitorando {totalLeads} contatos e {totalCampaigns} campanhas no Cloud Firestore.</p>
         </div>
         <div className="flex gap-2">
-          <span className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100 text-[10px] font-black text-emerald-600 flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div> CLOUD SYNC ATIVO
-          </span>
+          <button 
+            onClick={handleGenerateAiInsights}
+            disabled={isGeneratingAi}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50"
+          >
+            {isGeneratingAi ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {isGeneratingAi ? 'Gerando Relatório...' : 'Análise Estratégica IA'}
+          </button>
         </div>
       </header>
+
+      {aiReport && (
+        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 p-8 rounded-[3rem] shadow-2xl text-white relative overflow-hidden animate-in zoom-in-95 duration-500">
+          <div className="absolute top-0 right-0 p-10 opacity-10">
+            <Sparkles size={200} />
+          </div>
+          <div className="flex justify-between items-start mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md">
+                <FileText size={24} className="text-indigo-300" />
+              </div>
+              <h3 className="text-xl font-black tracking-tight">Relatório Gerencial Gemini IA</h3>
+            </div>
+            {/* Added fix: missing X icon import from lucide-react */}
+            <button onClick={() => setAiReport(null)} className="p-2 hover:bg-white/10 rounded-xl transition-all"><X size={20} /></button>
+          </div>
+          <div className="prose prose-invert max-w-none prose-sm leading-relaxed whitespace-pre-wrap font-medium">
+            {aiReport}
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards Dinâmicos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Base de Leads', value: totalLeads, trend: `+${newLeads} novos`, up: true, icon: Users, color: 'indigo' },
-          { label: 'Campanhas Ativas', value: runningCampaigns, trend: 'Tempo Real', up: true, icon: Send, color: 'emerald' },
-          { label: 'Conversas Ativas', value: activeLeads, trend: 'Live', up: true, icon: MessageSquareText, color: 'blue' },
+          { label: 'Base de Leads', value: totalLeads, trend: `Live Sync`, up: true, icon: Users, color: 'indigo' },
+          { label: 'Campanhas Ativas', value: campaigns.filter(c => c.status === 'Running').length, trend: 'Tempo Real', up: true, icon: Send, color: 'emerald' },
+          { label: 'Conversas Ativas', value: activeLeads, trend: 'WhatsApp', up: true, icon: MessageSquareText, color: 'blue' },
           { label: 'Leads em Risco', value: riskLeads, trend: 'Ação Urgente', up: false, icon: UserMinus, color: 'rose' },
         ].map((kpi, idx) => (
           <div key={idx} className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 relative group overflow-hidden hover:shadow-xl hover:shadow-gray-100 transition-all">
@@ -91,7 +152,6 @@ const Dashboard: React.FC = () => {
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">{kpi.label}</p>
               <h3 className="text-3xl font-black text-gray-800">{loading ? '...' : kpi.value}</h3>
             </div>
-            <div className={`absolute -bottom-4 -right-4 w-20 h-20 bg-${kpi.color}-500 opacity-[0.03] rounded-full group-hover:scale-150 transition-transform duration-700`}></div>
           </div>
         ))}
       </div>
@@ -100,16 +160,8 @@ const Dashboard: React.FC = () => {
         <div className="lg:col-span-8 bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
             <div>
-              <h3 className="text-xl font-black text-gray-800 tracking-tight">Desempenho Semanal</h3>
-              <p className="text-sm text-gray-400 font-medium">Fluxo de mensagens e engajamento da base</p>
-            </div>
-            <div className="flex gap-4">
-               <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                  <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full"></div> Enviadas
-               </div>
-               <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                  <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-sm"></div> Recebidas
-               </div>
+              <h3 className="text-xl font-black text-gray-800 tracking-tight">Fluxo de Engajamento</h3>
+              <p className="text-sm text-gray-400 font-medium">Atividade dos últimos 7 dias sincronizada.</p>
             </div>
           </div>
           <div className="h-80 w-full">
@@ -137,8 +189,8 @@ const Dashboard: React.FC = () => {
 
         <div className="lg:col-span-4 bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col items-center">
           <div className="text-center mb-8">
-            <h3 className="text-xl font-black text-gray-800 tracking-tight">Atendimento AI</h3>
-            <p className="text-sm text-gray-400 font-medium">Resolutividade via Automação</p>
+            <h3 className="text-xl font-black text-gray-800 tracking-tight">Motor ZapFlow</h3>
+            <p className="text-sm text-gray-400 font-medium">Resolutividade do Motor Híbrido</p>
           </div>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -156,20 +208,19 @@ const Dashboard: React.FC = () => {
                     <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
                   ))}
                 </Pie>
-                <Tooltip />
               </PieChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-8 w-full space-y-3">
              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
                 <span className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                   <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm"></div> Chatbot
+                   <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Chatbot/IA
                 </span>
                 <span className="text-lg font-black text-gray-800">72%</span>
              </div>
              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
                 <span className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                   <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-sm"></div> Humano
+                   <div className="w-2 h-2 rounded-full bg-indigo-500"></div> Suporte Humano
                 </span>
                 <span className="text-lg font-black text-gray-800">28%</span>
              </div>

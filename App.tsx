@@ -7,7 +7,8 @@ import Campaigns from './components/Campaigns';
 import Chatbot from './components/Chatbot';
 import ChatCenter from './components/ChatCenter';
 import Connection from './components/Connection';
-import { Menu, X, Zap } from 'lucide-react';
+import { Menu, Zap } from 'lucide-react';
+import { socketService } from './services/socket';
 
 type View = 'dashboard' | 'contacts' | 'campaigns' | 'chatbot' | 'chats' | 'connection';
 
@@ -18,20 +19,30 @@ const App: React.FC = () => {
   
   // Estado global de conexão
   const [isConnected, setIsConnected] = useState(false);
+  const [isSocketActive, setIsSocketActive] = useState(false);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
 
-  // Close mobile menu when view changes
   useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [currentView]);
+    // Monitora status real do socket globalmente
+    const handleStatus = (status: string) => {
+      setIsSocketActive(status === 'connected');
+    };
+    
+    socketService.connect();
+    socketService.on('status', handleStatus);
+    
+    return () => {
+      socketService.off('status', handleStatus);
+    };
+  }, []);
 
   const renderView = () => {
     switch (currentView) {
       case 'dashboard': return <Dashboard />;
       case 'contacts': return <Contacts />;
-      case 'campaigns': return <Campaigns />;
+      case 'campaigns': return <Campaigns isSocketActive={isSocketActive} />;
       case 'chatbot': return <Chatbot />;
-      case 'chats': return <ChatCenter />;
+      case 'chats': return <ChatCenter isSocketActive={isSocketActive} />;
       case 'connection': return (
         <Connection 
           isConnected={isConnected} 
@@ -56,7 +67,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans text-gray-900">
-      {/* Mobile Backdrop */}
       {isMobileMenuOpen && (
         <div 
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
@@ -64,7 +74,6 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Sidebar - Desktop and Mobile (Drawer) */}
       <div className={`
         fixed inset-y-0 left-0 z-50 transform lg:relative lg:translate-x-0 transition-transform duration-300 ease-in-out
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
@@ -76,12 +85,12 @@ const App: React.FC = () => {
           toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           onCloseMobile={() => setIsMobileMenuOpen(false)}
           isConnected={isConnected}
+          isSocketActive={isSocketActive}
           userPhoto={userPhoto}
         />
       </div>
       
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header Mobile */}
         <header className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-gray-200 sticky top-0 z-30">
           <button 
             onClick={() => setCurrentView('dashboard')}
@@ -104,7 +113,6 @@ const App: React.FC = () => {
           </button>
         </header>
 
-        {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto relative p-4 md:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto pb-10">
             {renderView()}

@@ -1,7 +1,7 @@
 
 import { io, Socket } from "socket.io-client";
 
-const SOCKET_URL = "http://localhost:3001"; 
+const SOCKET_URL = "http://localhost:8000"; 
 
 class SocketService {
   public socket: Socket | null = null;
@@ -11,7 +11,7 @@ class SocketService {
     if (this.socket?.connected) return;
 
     this.socket = io(SOCKET_URL, {
-      transports: ["websocket"],
+      transports: ["polling", "websocket"],
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 10,
@@ -19,29 +19,48 @@ class SocketService {
     });
 
     this.socket.on("connect", () => {
+      this.addLog("Handshake estabelecido com o motor ZapFlow.");
       this.emitInternal("status", "connected");
+      this.socket?.emit("request_qr");
     });
 
-    this.socket.on("qr", (qr: string) => {
+    // Mapeamento exato com o backend fornecido
+    this.socket.on("qr_code", (qr: string) => {
+      this.addLog("Novo QR Code recebido do servidor.");
       this.emitInternal("qr", qr);
     });
 
-    this.socket.on("ready", (info: any) => {
+    this.socket.on("status", (s: string) => {
+      this.addLog(`Status da Instância: ${s}`);
+      this.emitInternal("server_status", s);
+    });
+
+    this.socket.on("connection_data", (info: any) => {
+      this.addLog(`Dados da sessão sincronizados: ${info.name}`);
       this.emitInternal("ready", info);
     });
 
-    this.socket.on("message", (msg: any) => {
-      this.emitInternal("message", msg);
+    this.socket.on("new_message", (data: any) => {
+      this.emitInternal("message", data);
     });
 
-    this.socket.on("disconnect", () => {
+    this.socket.on("campaign_progress_update", (progress: any) => {
+      this.emitInternal("campaign_update", progress);
+    });
+
+    this.socket.on("disconnect", (reason) => {
+      this.addLog(`Socket desconectado: ${reason}`);
       this.emitInternal("status", "disconnected");
     });
+  }
 
-    this.socket.on("connect_error", (err) => {
-      console.error("Erro de conexão socket:", err);
-      this.emitInternal("error", err);
-    });
+  private addLog(message: string) {
+    const log = {
+      id: Date.now(),
+      time: new Date().toLocaleTimeString(),
+      message
+    };
+    this.emitInternal("log", log);
   }
 
   on(event: string, callback: Function) {
@@ -62,10 +81,19 @@ class SocketService {
 
   sendMessage(to: string, text: string) {
     if (this.socket?.connected) {
-      this.socket.emit("send_message", { to, text });
-    } else {
-      console.warn("Socket não conectado. Mensagem não enviada.");
+      // O backend usa POST /api/send-message ou socket emit?
+      // O server.js fornecido emite 'new_message' mas não tem listener 'message' para envio
+      // Vamos usar a API REST para maior confiabilidade de envio conforme o server.js
+      fetch(`${SOCKET_URL}/api/send-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number: to, message: text })
+      });
     }
+  }
+
+  logout() {
+    fetch(`${SOCKET_URL}/api/session/clear`, { method: 'POST' });
   }
 
   disconnect() {

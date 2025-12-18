@@ -30,6 +30,8 @@ export interface Campaign {
   total: number;
   mediaUrl?: string;
   createdAt: string;
+  speed?: string;
+  mediaType?: string;
 }
 
 export interface ChatbotRule {

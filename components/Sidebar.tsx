@@ -10,7 +10,9 @@ import {
   ChevronLeft, 
   ChevronRight,
   Zap,
-  X
+  X,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -20,6 +22,7 @@ interface SidebarProps {
   toggleCollapse: () => void;
   onCloseMobile?: () => void;
   isConnected?: boolean;
+  isSocketActive?: boolean;
   userPhoto?: string | null;
 }
 
@@ -30,6 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   toggleCollapse, 
   onCloseMobile,
   isConnected,
+  isSocketActive,
   userPhoto
 }) => {
   const menuItems = [
@@ -46,7 +50,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       bg-white border-r border-gray-200 h-full flex flex-col transition-all duration-300
       ${isCollapsed ? 'w-20' : 'w-72 md:w-64'}
     `}>
-      {/* Logo Area - Clicável para voltar ao dashboard */}
       <div className="p-6 flex items-center justify-between gap-3">
         <button 
           onClick={() => onViewChange('dashboard')}
@@ -69,7 +72,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             </h1>
           )}
         </button>
-        {/* Close Button Mobile */}
         <button onClick={onCloseMobile} className="lg:hidden p-2 text-gray-400 hover:text-gray-600">
           <X size={20} />
         </button>
@@ -92,10 +94,14 @@ const Sidebar: React.FC<SidebarProps> = ({
         ))}
       </nav>
 
-      <div className="p-4 border-t border-gray-100 hidden lg:block">
+      <div className="p-4 border-t border-gray-100 flex flex-col gap-2">
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${isSocketActive ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
+          {isSocketActive ? <Wifi size={14} /> : <WifiOff size={14} />}
+          {!isCollapsed && <span className="text-[10px] font-black uppercase tracking-widest">{isSocketActive ? 'Socket Online' : 'Socket Offline'}</span>}
+        </div>
         <button 
           onClick={toggleCollapse}
-          className="w-full flex items-center justify-center p-2 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+          className="w-full flex items-center justify-center p-2 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors hidden lg:flex"
         >
           {isCollapsed ? <ChevronRight size={20} /> : <div className="flex items-center gap-2"><ChevronLeft size={20} /> <span className="text-sm font-medium">Recolher</span></div>}
         </button>
