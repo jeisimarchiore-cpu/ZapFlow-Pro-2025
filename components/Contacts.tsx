@@ -87,7 +87,9 @@ const Contacts: React.FC = () => {
   const handleBulkDelete = async () => {
     if (confirm(`Excluir ${selectedIds.size} contatos permanentemente?`)) {
       setIsSyncing(true);
-      for (const id of Array.from(selectedIds)) {
+      // Fix: Explicitly cast to string[] to avoid 'unknown' type inference on line 91
+      const idsToDelete = Array.from(selectedIds) as string[];
+      for (const id of idsToDelete) {
         await deleteDocument('contacts', id);
       }
       setSelectedIds(new Set());

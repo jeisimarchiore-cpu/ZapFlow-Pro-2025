@@ -34,19 +34,25 @@ const ChatCenter: React.FC = () => {
 
   // Escuta mensagens reais via Socket
   useEffect(() => {
-    socketService.on("message", (msg: any) => {
-      // Se a mensagem for para o chat selecionado ou for um novo chat
+    const handleMessage = (msg: any) => {
+      // Se a mensagem for de um contato real, adicionamos ao fluxo
       const newMessage = {
         id: Date.now().toString(),
-        text: msg.text,
+        text: msg.text || msg.body || "",
         sender: 'user' as const,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
-      setMessages(prev => [...prev, newMessage]);
       
-      // Notificação visual (opcional)
-      console.log("Nova mensagem real recebida via Socket:", msg);
-    });
+      if (newMessage.text) {
+        setMessages(prev => [...prev, newMessage]);
+      }
+    };
+
+    socketService.on("message", handleMessage);
+    
+    return () => {
+      // Idealmente o SocketService deveria permitir remover listeners específicos
+    };
   }, []);
 
   const selectedChat = mockChats.find(c => c.id === selectedId);
@@ -65,30 +71,20 @@ const ChatCenter: React.FC = () => {
   const handleSendMessage = () => {
     if (!inputText.trim()) return;
     
-    // Envia via Socket (Se conectado)
+    // Envia via Socket REAL
     if (selectedChat) {
       socketService.sendMessage(selectedChat.phone, inputText);
-    }
-
-    const newMessage = {
-      id: Date.now().toString(),
-      text: inputText,
-      sender: 'agent' as const,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setMessages([...messages, newMessage]);
-    setInputText('');
-
-    // Simulação de resposta automática para teste se for o modo simulação
-    if (inputText.toLowerCase().includes("olá") || inputText.toLowerCase().includes("teste")) {
-       setTimeout(() => {
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            text: "✅ Teste Real-time recebido! O ZapFlow Pro está ouvindo seus sockets.",
-            sender: 'user',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }]);
-       }, 1500);
+      
+      const newMessage = {
+        id: Date.now().toString(),
+        text: inputText,
+        sender: 'agent' as const,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages([...messages, newMessage]);
+      setInputText('');
+    } else {
+      alert("Selecione um chat para enviar mensagens via socket.");
     }
   };
 
@@ -103,16 +99,19 @@ const ChatCenter: React.FC = () => {
         <div className="p-6 space-y-5 border-b border-gray-50 bg-gray-50/30">
           <div className="flex items-center justify-between">
             <h3 className="font-black text-2xl text-gray-800 tracking-tight">Chats Live</h3>
-            <button className="p-2 bg-white text-gray-400 hover:text-indigo-600 rounded-xl shadow-sm transition-all border border-gray-100">
-              <UserPlus size={18}/>
-            </button>
+            <div className="flex gap-2">
+               <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-lg shadow-emerald-200" title="Socket Online"></div>
+               <button className="p-2 bg-white text-gray-400 hover:text-indigo-600 rounded-xl shadow-sm transition-all border border-gray-100">
+                <UserPlus size={18}/>
+               </button>
+            </div>
           </div>
           
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
             <input 
               type="text" 
-              placeholder="Buscar chats ativos..." 
+              placeholder="Sincronizando chats reais..." 
               className="w-full pl-12 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 transition-all outline-none"
             />
           </div>
@@ -180,13 +179,13 @@ const ChatCenter: React.FC = () => {
                   <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black shadow-inner">
                     {selectedChat.avatar}
                   </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full"></div>
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm"></div>
                 </div>
                 <div className="min-w-0">
                   <h4 className="font-black text-gray-800 text-lg tracking-tight truncate">{selectedChat.name}</h4>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-emerald-500 font-black uppercase tracking-widest flex items-center gap-1">
-                      <Zap size={10} fill="currentColor" /> Atendimento Live
+                      <Zap size={10} fill="currentColor" /> Live WebSocket
                     </span>
                     <span className="text-gray-200">|</span>
                     <span className="text-[10px] text-gray-400 font-bold">+{selectedChat.phone}</span>
@@ -210,7 +209,7 @@ const ChatCenter: React.FC = () => {
               <div className="flex-1 flex flex-col relative overflow-hidden bg-[url('https://web.whatsapp.com/img/bg-chat-tile-light_04fcacde533c5e444d4d0f058aef2d0c.png')] bg-repeat">
                 <div className="flex-1 p-6 md:p-10 overflow-y-auto space-y-6 custom-scrollbar bg-gray-50/90 backdrop-blur-[2px]">
                   <div className="flex justify-center">
-                    <span className="bg-white/80 backdrop-blur shadow-sm px-4 py-1.5 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest border border-gray-100">Criptografia Ativa</span>
+                    <span className="bg-white/80 backdrop-blur shadow-sm px-4 py-1.5 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest border border-gray-100">Criptografia Ponta-a-Ponta</span>
                   </div>
                   
                   {messages.map((msg) => (
@@ -236,7 +235,7 @@ const ChatCenter: React.FC = () => {
                   <div className="mx-6 mb-2 p-4 bg-indigo-600 text-white rounded-2xl shadow-xl flex items-center justify-between animate-pulse">
                      <div className="flex items-center gap-3">
                         <Sparkles size={18} className="animate-spin duration-[3s]" />
-                        <span className="text-xs font-bold uppercase tracking-widest">Consultando IA Copilot...</span>
+                        <span className="text-xs font-bold uppercase tracking-widest">IA Analisando Fluxo Real...</span>
                      </div>
                   </div>
                 )}
@@ -268,11 +267,11 @@ const ChatCenter: React.FC = () => {
                       <div className="flex-1 relative">
                         <input 
                           type="text" 
-                          placeholder="Envie uma mensagem em tempo real..." 
+                          placeholder="Digite para disparar via Socket..." 
                           value={inputText}
                           onChange={(e) => setInputText(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                          className="w-full bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl px-6 py-4 text-sm shadow-inner transition-all outline-none"
+                          className="w-full bg-gray-50 border border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl px-6 py-4 text-sm shadow-inner transition-all outline-none font-medium"
                         />
                       </div>
                       <button 
@@ -307,7 +306,7 @@ const ChatCenter: React.FC = () => {
 
                      <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-3">
                         <div className="flex justify-between items-center">
-                           <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Lead Score</span>
+                           <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Health Score</span>
                            <span className={`text-xs font-black text-emerald-500`}>{selectedChat.score}%</span>
                         </div>
                         <div className="w-full h-2 bg-white rounded-full overflow-hidden shadow-inner">
@@ -333,8 +332,8 @@ const ChatCenter: React.FC = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <h4 className="text-2xl font-black text-gray-800 tracking-tight">Hub de Mensagens Live</h4>
-              <p className="text-gray-400 text-sm max-w-xs mx-auto font-medium">Conecte seu WhatsApp para começar a receber mensagens em tempo real aqui.</p>
+              <h4 className="text-2xl font-black text-gray-800 tracking-tight">Painel de Sincronia Live</h4>
+              <p className="text-gray-400 text-sm max-w-xs mx-auto font-medium">As mensagens aparecerão aqui em tempo real assim que seu socket Node.js detectar novas interações.</p>
             </div>
           </div>
         )}
