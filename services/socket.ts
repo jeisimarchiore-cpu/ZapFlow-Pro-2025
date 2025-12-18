@@ -1,7 +1,6 @@
-
 import { io, Socket } from "socket.io-client";
 
-const SOCKET_URL = "http://localhost:8000"; 
+const SOCKET_URL = "http://localhost:8080"; 
 
 class SocketService {
   public socket: Socket | null = null;
@@ -10,7 +9,7 @@ class SocketService {
   connect() {
     if (this.socket?.connected) return;
 
-    this.addLog(`Iniciando tentativa de conexão em: ${SOCKET_URL}`);
+    this.addLog(`Conectando ao Motor ZapFlow em ${SOCKET_URL}...`);
     this.emitInternal("socket_status", "connecting");
 
     this.socket = io(SOCKET_URL, {
@@ -23,14 +22,13 @@ class SocketService {
     });
 
     this.socket.on("connect", () => {
-      this.addLog("✅ Conectado ao servidor Node.js (Porta 8000)");
+      this.addLog("✅ Conexão estabelecida com o motor (Porta 8080).");
       this.emitInternal("socket_status", "connected");
-      // Solicita QR assim que o socket conecta
       this.socket?.emit("request_qr");
     });
 
     this.socket.on("qr_code", (qr: string) => {
-      this.addLog("📸 QR Code recebido do motor.");
+      this.addLog("📸 QR Code gerado pelo motor.");
       this.emitInternal("qr", qr);
     });
 
@@ -40,17 +38,17 @@ class SocketService {
     });
 
     this.socket.on("connection_data", (info: any) => {
-      this.addLog(`👤 Autenticado como: ${info.name || 'Usuário'}`);
+      this.addLog(`👤 Dispositivo vinculado: ${info.name || 'WhatsApp'}`);
       this.emitInternal("ready", info);
     });
 
     this.socket.on("connect_error", (err) => {
-      this.addLog(`❌ Erro de rede: ${err.message}. Verifique se o servidor Node está rodando.`);
+      this.addLog(`❌ Erro de rede: ${err.message}. Verifique se o Docker está rodando na porta 8080.`);
       this.emitInternal("socket_status", "disconnected");
     });
 
     this.socket.on("disconnect", (reason) => {
-      this.addLog(`⚠️ Desconectado do servidor: ${reason}`);
+      this.addLog(`⚠️ Conexão interrompida: ${reason}`);
       this.emitInternal("socket_status", "disconnected");
     });
 
@@ -90,16 +88,13 @@ class SocketService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ number: to, message: text })
-      }).catch(e => this.addLog(`Erro ao enviar mensagem: ${e.message}`));
-    } else {
-      this.addLog("❌ Impossível enviar: Sem conexão com o servidor.");
+      }).catch(e => this.addLog(`Erro ao enviar: ${e.message}`));
     }
   }
 
   logout() {
-    this.addLog("Solicitando desconexão total...");
     fetch(`${SOCKET_URL}/api/session/clear`, { method: 'POST' })
-      .catch(e => this.addLog(`Erro ao limpar sessão: ${e.message}`));
+      .catch(e => this.addLog(`Erro no logout: ${e.message}`));
   }
 
   disconnect() {

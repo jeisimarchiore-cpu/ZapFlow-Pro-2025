@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Bot, Sparkles, MessageSquare, Trash2, Plus, Save, Power, RefreshCw } from 'lucide-react';
 import { subscribeToCollection, saveDocument, deleteDocument, updateDocument, getDocumentRef } from '../services/firebase';
@@ -11,13 +10,11 @@ const Chatbot: React.FC = () => {
   const [aiConfig, setAiConfig] = useState({ persona: '', fallback: true });
   const [isSyncing, setIsSyncing] = useState(true);
 
-  const SERVER_URL = "http://localhost:8000";
+  const SERVER_URL = "http://localhost:8080";
 
-  // Sync com Firestore e push para o Servidor Node
   useEffect(() => {
     const unsub = subscribeToCollection('chatbot_rules', (data) => {
       setRules(data);
-      // Sincroniza com o Node.js
       fetch(`${SERVER_URL}/api/chatbot/rules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -36,7 +33,6 @@ const Chatbot: React.FC = () => {
         setAiConfig(data as any);
         setIsEnabled(data.isEnabled !== false);
         
-        // Sincroniza config de IA com o Node
         fetch(`${SERVER_URL}/api/chatbot/config`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -54,7 +50,6 @@ const Chatbot: React.FC = () => {
     const docRef = getDocumentRef('chatbot_config', 'main');
     await setDoc(docRef, configToSave);
     
-    // Push imediato para o motor Node
     await fetch(`${SERVER_URL}/api/chatbot/config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

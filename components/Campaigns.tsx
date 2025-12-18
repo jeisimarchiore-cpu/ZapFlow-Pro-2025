@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Send, Clock, Shield, BarChart3, List, Layers, Play, Pause, 
   Square, Upload, MessageSquare, CheckCheck, Info, Sparkles,
-  ChevronRight, AlertCircle, FileText, Image as ImageIcon, 
+  ChevronRight, AlertCircle, FileText, ImageIcon, 
   Video, Calendar, MousePointer2, Zap, History, Eye, Plus, RefreshCw, Smartphone
 } from 'lucide-react';
 import { subscribeToCollection, saveDocument, updateDocument } from '../services/firebase';
@@ -23,7 +22,7 @@ const Campaigns: React.FC<CampaignsProps> = ({ isSocketActive }) => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  const SERVER_URL = "http://localhost:8000";
+  const SERVER_URL = "http://localhost:8080";
 
   useEffect(() => {
     const unsub = subscribeToCollection('campaigns', (data) => {
@@ -35,7 +34,6 @@ const Campaigns: React.FC<CampaignsProps> = ({ isSocketActive }) => {
     return () => { unsub(); unsubContacts(); };
   }, []);
 
-  // Checkpoint de progresso real via Socket do Backend
   useEffect(() => {
     const handleUpdate = (data: any) => {
       if (data.campaignId) {
@@ -68,7 +66,6 @@ const Campaigns: React.FC<CampaignsProps> = ({ isSocketActive }) => {
         speed: speed
       });
 
-      // DISPARO REAL NO BACKEND
       await fetch(`${SERVER_URL}/api/campaign/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -99,7 +96,7 @@ const Campaigns: React.FC<CampaignsProps> = ({ isSocketActive }) => {
             { id: 'running', label: 'Em Execução', icon: Play },
             { id: 'history', label: 'Histórico', icon: History },
           ].map((tab) => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-gray-400 hover:bg-gray-50'}`}>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-50'}`}>
               <tab.icon size={16} /> {tab.label}
             </button>
           ))}
@@ -116,23 +113,14 @@ const Campaigns: React.FC<CampaignsProps> = ({ isSocketActive }) => {
                 <textarea rows={6} value={msgText} onChange={(e) => setMsgText(e.target.value)} className="w-full p-6 bg-gray-50 border border-gray-100 rounded-[2rem] outline-none focus:bg-white text-sm" placeholder="Sua mensagem..." />
                 <div className="flex gap-2">
                    {['Lento', 'Normal', 'Rápido'].map(s => (
-                     <button key={s} onClick={() => setSpeed(s)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${speed === s ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' : 'bg-white text-gray-400 border-gray-100'}`}>{s}</button>
+                     <button key={s} onClick={() => setSpeed(s)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${speed === s ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-gray-400 border-gray-100'}`}>{s}</button>
                    ))}
                 </div>
               </div>
             </div>
-            <button onClick={handleStartCampaign} disabled={isSaving || !isSocketActive} className="w-full py-6 bg-emerald-500 text-white font-black rounded-[2.5rem] shadow-2xl shadow-emerald-100 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50">
+            <button onClick={handleStartCampaign} disabled={isSaving || !isSocketActive} className="w-full py-6 bg-emerald-500 text-white font-black rounded-[2.5rem] shadow-2xl hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50">
               {isSaving ? 'INICIANDO MOTOR...' : 'LANÇAR CAMPANHA AGORA'}
             </button>
-          </div>
-          <div className="lg:col-span-5 hidden lg:block">
-             <div className="mx-auto w-full max-w-[300px] aspect-[9/18.5] bg-gray-900 rounded-[3rem] border-[8px] border-gray-800 shadow-2xl overflow-hidden relative">
-                <div className="p-4 bg-[#e5ddd5] h-full">
-                   <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm text-xs text-gray-800 font-medium">
-                      {msgText.replace('{{nome}}', 'Lead')}
-                   </div>
-                </div>
-             </div>
           </div>
         </div>
       ) : (
