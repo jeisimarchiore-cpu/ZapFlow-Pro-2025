@@ -1,7 +1,7 @@
-
 /**
- * server.js - Versão V24.04 (Docker Optimized)
+ * server.js - Versão V24.06 (Docker High-Stability)
  * Motor ZapFlow Pro - API do WhatsApp, Campanhas e Insights de IA.
+ * Correção: Execution context destroyed error in Docker environment.
  */
 
 const express = require('express');
@@ -18,13 +18,7 @@ const SESSION_CLIENT_ID = "zapflow_session";
 
 // Inicialização da IA (Gemini 3 Flash)
 const apiKey = process.env.API_KEY || '';
-const genAI = new GoogleGenAI({ apiKey: apiKey });
-
-let chatbotRules = []; 
-let aiConfig = {
-    isAiEnabled: true,
-    systemPrompt: 'Você é o consultor oficial da ZapFlow Pro. Responda de forma estratégica e concisa.',
-};
+const genAI = (apiKey && apiKey !== 'undefined') ? new GoogleGenAI({ apiKey: apiKey }) : null;
 
 // --- 2. CONFIGURAÇÃO EXPRESS ---
 const app = express(); 
@@ -37,19 +31,29 @@ const io = new Server(server, {
 });
 
 // --- 3. MOTOR WHATSAPP ---
-// No Docker (Linux), o Chromium geralmente fica em /usr/bin/chromium
+// Configuração otimizada para evitar "Execution context was destroyed"
 const client = new Client({
     authStrategy: new LocalAuth({ clientId: SESSION_CLIENT_ID }), 
     puppeteer: {
         headless: true,
-        executablePath: process.env.CHROME_PATH || '/usr/bin/chromium',
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-gpu'
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process', // CRÍTICO: Resolve problemas de navegação em containers
+            '--disable-gpu',
+            '--disable-extensions'
         ]
     },
+    // Forçar versão específica do WhatsApp Web para evitar bugs de injeção
+    webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1018911043-alpha.html',
+    }
 });
 
 // --- 4. ROTAS DE IA ---
@@ -57,8 +61,8 @@ const client = new Client({
 app.post('/api/ai/insights', async (req, res) => {
     const { contactCount, activeContacts, riskContacts, campaignStats, filterPeriod } = req.body;
     
-    if (!apiKey || apiKey === 'undefined' || apiKey === '') {
-        return res.status(500).json({ success: false, error: "API_KEY não configurada no servidor (Variável de ambiente)." });
+    if (!genAI) {
+        return res.status(500).json({ success: false, error: "API_KEY não configurada ou inválida no servidor." });
     }
 
     try {
@@ -130,11 +134,20 @@ client.on('qr', (qr) => {
 client.on('ready', async () => {
     console.log('🚀 WhatsApp Conectado!');
     io.emit('status', 'CONNECTED');
-    io.emit('connection_data', {
-        name: client.info.pushname,
-        number: client.info.wid.user,
-        profilePicUrl: await client.getProfilePicUrl(client.info.wid._serialized).catch(() => null)
-    });
+    try {
+        const profilePic = await client.getProfilePicUrl(client.info.wid._serialized);
+        io.emit('connection_data', {
+            name: client.info.pushname,
+            number: client.info.wid.user,
+            profilePicUrl: profilePic
+        });
+    } catch (e) {
+        io.emit('connection_data', {
+            name: client.info.pushname,
+            number: client.info.wid.user,
+            profilePicUrl: null
+        });
+    }
 });
 
 client.on('message', async (msg) => {
@@ -142,12 +155,25 @@ client.on('message', async (msg) => {
     io.emit('new_message', { chatId: msg.from, body: msg.body });
 });
 
-client.initialize().catch(e => console.error("❌ Falha crítica no Puppeteer:", e.message));
+client.on('disconnected', (reason) => {
+    console.log('⚠️ WhatsApp desconectado:', reason);
+    io.emit('status', 'DISCONNECTED');
+    // Reinicialização resiliente
+    setTimeout(() => client.initialize(), 5000);
+});
+
+// Inicialização com tratamento de erro global
+client.initialize().catch(e => {
+    console.error("❌ Falha crítica na inicialização:", e.message);
+    if (e.message.includes('Execution context was destroyed')) {
+        console.log("Reiniciando motor devido a erro de navegação...");
+        setTimeout(() => client.initialize(), 2000);
+    }
+});
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n=========================================`);
-    console.log(`🚀 ZAPFLOW PRO ENGINE ONLINE`);
-    console.log(`📡 Porta: ${PORT}`);
-    console.log(`🔑 Gemini API: ${apiKey ? 'CONFIGURADA' : 'AUSENTE'}`);
+    console.log(`🚀 ZAPFLOW PRO ENGINE ONLINE (PORTA ${PORT})`);
+    console.log(`📡 Modo: Docker High-Stability`);
     console.log(`=========================================\n`);
 });
