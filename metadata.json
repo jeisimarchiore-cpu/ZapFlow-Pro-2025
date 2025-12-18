@@ -1,0 +1,8 @@
+{
+  "name": "ZapFlow Pro - CRM & WhatsApp Automation",
+  "description": "A high-performance CRM and Marketing Automation platform for WhatsApp, featuring real-time BI analytics, campaign management, and hybrid AI chatbot integration.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
