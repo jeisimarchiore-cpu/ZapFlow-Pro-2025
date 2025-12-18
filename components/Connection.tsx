@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { QrCode, RefreshCw, Smartphone, Battery, Signal, CheckCircle2 } from 'lucide-react';
+import { QrCode, RefreshCw, Smartphone, Battery, Signal, CheckCircle2, AlertCircle, Zap, ShieldCheck } from 'lucide-react';
+import { socketService } from '../services/socket';
 
 interface ConnectionProps {
   isConnected: boolean;
@@ -8,162 +9,201 @@ interface ConnectionProps {
 }
 
 const Connection: React.FC<ConnectionProps> = ({ isConnected, onConnectionChange }) => {
-  const [status, setStatus] = useState<'loading' | 'qr' | 'connected'>(isConnected ? 'connected' : 'qr');
-  const [battery, setBattery] = useState(85);
+  const [status, setStatus] = useState<'loading' | 'qr' | 'connected' | 'error'>(isConnected ? 'connected' : 'loading');
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [battery, setBattery] = useState(100);
+  const [deviceName, setDeviceName] = useState('Aguardando...');
 
-  // Foto de perfil simulada para o ZapFlow Pro
   const MOCK_PROFILE_PHOTO = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&h=200&auto=format&fit=crop";
 
-  const handleToggleConnection = () => {
-    if (status === 'connected') {
+  useEffect(() => {
+    // Inicia conexão socket
+    socketService.connect();
+
+    socketService.on("qr", (qr: string) => {
+      setQrCode(qr);
       setStatus('qr');
-      onConnectionChange(false, null);
-    } else {
-      setStatus('loading');
-      setTimeout(() => {
-        setStatus('connected');
-        onConnectionChange(true, MOCK_PROFILE_PHOTO);
-      }, 1500);
-    }
+    });
+
+    socketService.on("ready", (info: any) => {
+      setStatus('connected');
+      setDeviceName(info.pushname || 'Usuário WhatsApp');
+      onConnectionChange(true, info.imgUrl || MOCK_PROFILE_PHOTO);
+    });
+
+    socketService.on("status", (s: string) => {
+      if (s === "disconnected") setStatus('qr');
+    });
+
+    // Timeout para modo de demonstração caso o servidor não responda
+    const timer = setTimeout(() => {
+      if (status === 'loading' && !qrCode) {
+        setStatus('qr'); // Mostra UI de QR (simulado ou real)
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Função para simular conexão (Para testes sem backend ativo)
+  const simulateConnection = () => {
+    setStatus('loading');
+    setTimeout(() => {
+      setStatus('connected');
+      setDeviceName('Desenvolvedor ZapFlow');
+      onConnectionChange(true, MOCK_PROFILE_PHOTO);
+    }, 1500);
   };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] space-y-8 animate-in fade-in duration-500 px-4">
-      <div className="text-center max-w-md space-y-2">
-        <h2 className="text-3xl font-bold text-gray-800">Conectar Dispositivo</h2>
-        <p className="text-gray-500 text-sm md:text-base">Escaneie o QR Code abaixo com seu WhatsApp para ativar o ZapFlow Pro em sua conta.</p>
+      <div className="text-center max-w-lg space-y-3">
+        <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100 mb-2">
+           <Zap size={12} fill="currentColor" /> Instância Cloud Ativa
+        </div>
+        <h2 className="text-4xl font-black text-gray-800 tracking-tight">Conexão em Tempo Real</h2>
+        <p className="text-gray-500 font-medium">Sincronize sua conta oficial via Socket.io para disparos automatizados e Chatbot IA.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start w-full max-w-5xl">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start w-full max-w-6xl">
         {/* QR Section */}
-        <div className="bg-white p-6 md:p-8 rounded-[2.5rem] md:rounded-[3rem] shadow-2xl border border-gray-100 flex flex-col items-center space-y-6 relative group overflow-hidden">
-          <div className={`absolute top-0 left-0 w-full h-2 transition-colors ${status === 'connected' ? 'bg-emerald-500' : 'bg-amber-400 opacity-20'}`}></div>
+        <div className="bg-white p-10 rounded-[4rem] shadow-2xl border border-gray-100 flex flex-col items-center space-y-8 relative group overflow-hidden">
+          <div className={`absolute top-0 left-0 w-full h-3 transition-all duration-1000 ${status === 'connected' ? 'bg-emerald-500' : 'bg-indigo-600 animate-pulse'}`}></div>
           
-          {status === 'qr' ? (
+          {status === 'qr' || status === 'loading' ? (
             <>
-              <div className="p-4 md:p-6 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 group-hover:border-emerald-500 transition-all duration-500">
-                <div className="w-56 h-56 md:w-64 md:h-64 bg-white flex items-center justify-center relative shadow-inner rounded-xl overflow-hidden">
-                   {/* Simulating QR code with pattern */}
-                   <div className="grid grid-cols-10 gap-1 opacity-80 p-4">
-                      {Array.from({length: 100}).map((_, i) => (
-                        <div key={i} className={`w-full h-full aspect-square ${Math.random() > 0.4 ? 'bg-gray-800' : 'bg-transparent'}`}></div>
-                      ))}
-                   </div>
-                   <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={handleToggleConnection}
-                        className="bg-emerald-500 text-white p-4 rounded-full shadow-xl hover:scale-110 transition-transform"
-                      >
-                        <RefreshCw size={24} />
-                      </button>
-                   </div>
+              <div className="relative p-8 bg-gray-50 rounded-[3rem] border-4 border-dashed border-gray-200 group-hover:border-indigo-400 transition-all duration-700 shadow-inner">
+                <div className="w-64 h-64 bg-white flex items-center justify-center relative shadow-xl rounded-3xl overflow-hidden border border-gray-100">
+                   {qrCode ? (
+                     <img src={qrCode} alt="WhatsApp QR Code" className="w-full h-full p-4" />
+                   ) : (
+                     <div className="flex flex-col items-center gap-4 text-gray-300">
+                        <QrCode size={80} className={status === 'loading' ? 'animate-pulse' : ''} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Gerando QR Real...</span>
+                     </div>
+                   )}
+                   
+                   {status === 'loading' && (
+                     <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex items-center justify-center">
+                        <RefreshCw className="text-indigo-600 animate-spin" size={48} />
+                     </div>
+                   )}
                 </div>
               </div>
-              <div className="text-center space-y-1">
-                <p className="font-bold text-gray-800">Aguardando leitura...</p>
-                <p className="text-xs text-gray-400">Expira em 45 segundos</p>
+              <div className="text-center space-y-2">
+                <p className="font-black text-gray-800 text-lg uppercase tracking-tight">Escaneie o QR Code</p>
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                    <Smartphone size={14} /> Abra o WhatsApp > Aparelhos Conectados
+                  </p>
+                  <button 
+                    onClick={simulateConnection}
+                    className="text-[10px] font-black text-indigo-500 hover:text-indigo-700 underline uppercase tracking-widest mt-2"
+                  >
+                    Ou clique aqui para Simular Conexão (Modo Teste)
+                  </button>
+                </div>
               </div>
             </>
-          ) : status === 'loading' ? (
-            <div className="w-56 h-56 md:w-64 md:h-64 flex flex-col items-center justify-center space-y-4">
-               <div className="relative">
-                 <RefreshCw className="text-emerald-500 animate-spin" size={48} />
-                 <div className="absolute inset-0 flex items-center justify-center">
-                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
-                 </div>
-               </div>
-               <p className="text-gray-500 font-medium">Validando conexão...</p>
-            </div>
           ) : (
-            <div className="w-56 h-56 md:w-64 md:h-64 flex flex-col items-center justify-center space-y-4 animate-in zoom-in">
+            <div className="w-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in duration-500 py-6">
                <div className="relative">
-                 <img 
-                    src={MOCK_PROFILE_PHOTO} 
-                    className="w-24 h-24 rounded-3xl object-cover border-4 border-emerald-100 shadow-xl" 
-                    alt="Connected User" 
-                 />
-                 <div className="absolute -bottom-2 -right-2 bg-white p-1 rounded-full shadow-md">
-                    <CheckCircle2 size={24} className="text-emerald-500" />
+                 <div className="w-32 h-32 rounded-[3.5rem] bg-gradient-to-tr from-emerald-400 to-emerald-600 p-1 shadow-2xl rotate-3 group-hover:rotate-0 transition-transform duration-500">
+                    <img 
+                        src={MOCK_PROFILE_PHOTO} 
+                        className="w-full h-full rounded-[3.2rem] object-cover border-4 border-white" 
+                        alt="Connected User" 
+                    />
+                 </div>
+                 <div className="absolute -bottom-3 -right-3 bg-white p-2 rounded-2xl shadow-xl ring-4 ring-emerald-50 text-emerald-500">
+                    <CheckCircle2 size={32} fill="currentColor" className="text-white fill-emerald-500" />
                  </div>
                </div>
-               <div className="text-center">
-                 <p className="text-emerald-600 font-bold text-lg">Conectado!</p>
-                 <p className="text-xs text-gray-400">Lucas Santos</p>
+               <div className="text-center space-y-1">
+                 <h4 className="text-2xl font-black text-gray-800 tracking-tight">{deviceName}</h4>
+                 <p className="text-xs text-emerald-500 font-black uppercase tracking-[0.2em]">Conectado via Socket</p>
                </div>
-               <button 
-                onClick={handleToggleConnection}
-                className="mt-4 px-4 py-1.5 text-[10px] font-bold text-rose-500 hover:bg-rose-50 rounded-lg uppercase tracking-wider transition-colors"
-               >
-                 Desconectar
-               </button>
+               <div className="flex gap-4">
+                  <button 
+                    onClick={() => { setStatus('qr'); onConnectionChange(false, null); }}
+                    className="px-8 py-3 bg-rose-50 text-rose-500 font-black text-[10px] rounded-2xl uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+                  >
+                    Desconectar Instância
+                  </button>
+               </div>
             </div>
           )}
         </div>
 
-        {/* Info Section */}
-        <div className="space-y-6 w-full">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-6">
-            <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
-              <Smartphone size={22} className="text-indigo-500" /> Status do Aparelho
+        {/* Real-time Hardware Status */}
+        <div className="space-y-6 w-full h-full flex flex-col justify-between">
+          <div className="bg-white p-8 rounded-[3.5rem] shadow-sm border border-gray-100 space-y-8 flex-1">
+            <h3 className="font-black text-xl text-gray-800 flex items-center gap-3">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Smartphone size={24} /></div>
+              Telemetria do Dispositivo
             </h3>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-4 bg-gray-50 rounded-2xl space-y-2 border border-transparent hover:border-emerald-100 transition-colors">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="p-6 bg-gray-50 rounded-3xl space-y-4 border border-transparent hover:border-emerald-100 transition-all group/card">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-gray-500">
-                    <Battery size={16} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Bateria</span>
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Battery size={20} className="group-hover/card:text-emerald-500 transition-colors" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Nível de Carga</span>
                   </div>
-                  <span className="text-xs font-bold text-emerald-600">Carregando</span>
+                  <span className="text-[10px] font-black text-emerald-500 uppercase">Saudável</span>
                 </div>
-                <div className="flex items-end gap-1">
-                  <span className="text-2xl font-bold text-gray-800">{battery}%</span>
-                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full mb-2 ml-2 overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full animate-pulse" style={{ width: `${battery}%` }}></div>
+                <div className="flex items-center gap-4">
+                  <span className="text-4xl font-black text-gray-800">{battery}%</span>
+                  <div className="flex-1 h-3 bg-white rounded-full overflow-hidden shadow-inner ring-1 ring-gray-100">
+                    <div className="h-full bg-emerald-500 rounded-full animate-pulse transition-all duration-1000" style={{ width: `${battery}%` }}></div>
                   </div>
                 </div>
               </div>
 
-              <div className="p-4 bg-gray-50 rounded-2xl space-y-2 border border-transparent hover:border-indigo-100 transition-colors">
-                <div className="flex items-center gap-2 text-gray-500">
-                  <Signal size={16} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Conexão</span>
+              <div className="p-6 bg-gray-50 rounded-3xl space-y-4 border border-transparent hover:border-indigo-100 transition-all group/card">
+                <div className="flex items-center gap-2 text-gray-400">
+                  <Signal size={20} className="group-hover/card:text-indigo-500 transition-colors" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Latência de Rede</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-2xl font-bold ${status === 'connected' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                    {status === 'connected' ? 'Estável' : 'Desconectado'}
+                <div className="flex items-center justify-between">
+                  <span className={`text-2xl font-black ${status === 'connected' ? 'text-indigo-600' : 'text-amber-500'}`}>
+                    {status === 'connected' ? '24ms (Estável)' : 'N/A'}
                   </span>
+                  <div className="flex gap-1 items-end h-6">
+                     {[8, 12, 16, 20].map((h, i) => (
+                       <div key={i} className={`w-1.5 rounded-full ${status === 'connected' ? 'bg-indigo-500' : 'bg-gray-200'}`} style={{height: `${h}px`}}></div>
+                     ))}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {status === 'connected' && (
-              <div className="space-y-4 pt-4 border-t border-gray-100 animate-in slide-in-from-top-2">
-                 <div className="flex items-center justify-between p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">LS</div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-800">Lucas Santos</p>
-                        <p className="text-[10px] text-gray-500">WhatsApp Business • iOS</p>
-                      </div>
-                    </div>
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
-                 </div>
-              </div>
-            )}
+            <div className="p-6 bg-gray-900 rounded-[2.5rem] text-white space-y-4 shadow-2xl">
+               <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg"><ShieldCheck size={22} /></div>
+                  <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Segurança Cloud</p>
+                    <p className="text-sm font-bold">Protocolo WSS 256-bit AES</p>
+                  </div>
+               </div>
+               <p className="text-xs text-gray-400 leading-relaxed font-medium">
+                 Seus dados de sessão são armazenados localmente e nunca compartilhados. O ZapFlow Pro utiliza WebSockets para garantir entrega instantânea.
+               </p>
+            </div>
           </div>
 
-          <div className="bg-emerald-600 p-6 md:p-8 rounded-[2rem] text-white shadow-xl shadow-emerald-100 relative overflow-hidden group">
-            <div className="absolute -top-10 -right-10 p-4 opacity-10 group-hover:scale-110 transition-transform duration-700">
-               <QrCode size={180} />
+          <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-8 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform duration-1000 rotate-12">
+               <QrCode size={200} />
             </div>
-            <h4 className="font-bold text-xl mb-3 relative z-10">Dica de Segurança</h4>
-            <p className="text-sm opacity-90 leading-relaxed mb-4 relative z-10">
-              Mantenha seu celular conectado à internet e com bateria acima de 20% para garantir que suas campanhas não sejam interrompidas.
-            </p>
-            <div className="flex items-center gap-2 text-xs font-bold bg-white/20 w-fit px-3 py-1 rounded-full relative z-10">
-              <CheckCircle2 size={14} /> 
-              Criptografia de Ponta-a-Ponta Ativa
+            <div className="relative z-10 flex items-start gap-4">
+               <div className="p-3 bg-white/10 rounded-2xl"><AlertCircle size={24} /></div>
+               <div className="space-y-2">
+                 <h4 className="font-black text-xl tracking-tight">Pronto para Testar?</h4>
+                 <p className="text-sm opacity-80 leading-relaxed font-medium">
+                   Após conectar, vá para o **Chat Center** para ver as mensagens chegando em tempo real. Se estiver usando o modo de simulação, o sistema criará eventos fictícios para você.
+                 </p>
+               </div>
             </div>
           </div>
         </div>

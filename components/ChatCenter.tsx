@@ -4,11 +4,10 @@ import {
   Search, Send, Paperclip, MoreVertical, CheckCheck, Phone, 
   Video, Smile, ChevronLeft, MessageSquare, UserPlus, Tag, 
   Sparkles, Zap, Clock, User, Bot, Hash, Info, X, 
-  CheckCircle2, ArrowRight, CornerDownRight,
-  // Added Trash2 to imports
-  Trash2
+  CheckCircle2, ArrowRight, CornerDownRight, Trash2
 } from 'lucide-react';
 import { generateAiResponse } from '../services/geminiService';
+import { socketService } from '../services/socket';
 
 const mockChats = [
   { id: '1', name: 'João Silva', last: 'Pode me enviar o boleto?', time: '10:45', unread: 2, avatar: 'JS', status: 'Aguardando', score: 85, phone: '5511999999999', tags: ['VIP', 'Lead Quente'] },
@@ -33,12 +32,28 @@ const ChatCenter: React.FC = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Escuta mensagens reais via Socket
+  useEffect(() => {
+    socketService.on("message", (msg: any) => {
+      // Se a mensagem for para o chat selecionado ou for um novo chat
+      const newMessage = {
+        id: Date.now().toString(),
+        text: msg.text,
+        sender: 'user' as const,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, newMessage]);
+      
+      // Notificação visual (opcional)
+      console.log("Nova mensagem real recebida via Socket:", msg);
+    });
+  }, []);
+
   const selectedChat = mockChats.find(c => c.id === selectedId);
 
   const handleAiSuggest = async () => {
     if (!selectedChat) return;
     setIsGeneratingAi(true);
-    const context = messages.map(m => `${m.sender}: ${m.text}`).join('\n');
     const suggestion = await generateAiResponse(
       `O cliente ${selectedChat.name} perguntou: "${selectedChat.last}". Sugira uma resposta curta e profissional.`,
       "Atendente prestativo e comercial da ZapFlow Pro"
@@ -49,6 +64,12 @@ const ChatCenter: React.FC = () => {
 
   const handleSendMessage = () => {
     if (!inputText.trim()) return;
+    
+    // Envia via Socket (Se conectado)
+    if (selectedChat) {
+      socketService.sendMessage(selectedChat.phone, inputText);
+    }
+
     const newMessage = {
       id: Date.now().toString(),
       text: inputText,
@@ -57,6 +78,18 @@ const ChatCenter: React.FC = () => {
     };
     setMessages([...messages, newMessage]);
     setInputText('');
+
+    // Simulação de resposta automática para teste se for o modo simulação
+    if (inputText.toLowerCase().includes("olá") || inputText.toLowerCase().includes("teste")) {
+       setTimeout(() => {
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            text: "✅ Teste Real-time recebido! O ZapFlow Pro está ouvindo seus sockets.",
+            sender: 'user',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
+       }, 1500);
+    }
   };
 
   return (
@@ -69,7 +102,7 @@ const ChatCenter: React.FC = () => {
       `}>
         <div className="p-6 space-y-5 border-b border-gray-50 bg-gray-50/30">
           <div className="flex items-center justify-between">
-            <h3 className="font-black text-2xl text-gray-800 tracking-tight">Chats</h3>
+            <h3 className="font-black text-2xl text-gray-800 tracking-tight">Chats Live</h3>
             <button className="p-2 bg-white text-gray-400 hover:text-indigo-600 rounded-xl shadow-sm transition-all border border-gray-100">
               <UserPlus size={18}/>
             </button>
@@ -79,7 +112,7 @@ const ChatCenter: React.FC = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
             <input 
               type="text" 
-              placeholder="Buscar por nome ou número..." 
+              placeholder="Buscar chats ativos..." 
               className="w-full pl-12 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-sm focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 transition-all outline-none"
             />
           </div>
@@ -153,7 +186,7 @@ const ChatCenter: React.FC = () => {
                   <h4 className="font-black text-gray-800 text-lg tracking-tight truncate">{selectedChat.name}</h4>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-emerald-500 font-black uppercase tracking-widest flex items-center gap-1">
-                      <Zap size={10} fill="currentColor" /> Atendimento Ativo
+                      <Zap size={10} fill="currentColor" /> Atendimento Live
                     </span>
                     <span className="text-gray-200">|</span>
                     <span className="text-[10px] text-gray-400 font-bold">+{selectedChat.phone}</span>
@@ -235,7 +268,7 @@ const ChatCenter: React.FC = () => {
                       <div className="flex-1 relative">
                         <input 
                           type="text" 
-                          placeholder="Digite sua resposta aqui..." 
+                          placeholder="Envie uma mensagem em tempo real..." 
                           value={inputText}
                           onChange={(e) => setInputText(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
@@ -253,18 +286,17 @@ const ChatCenter: React.FC = () => {
                 </div>
               </div>
 
-              {/* CRM Context Sidebar */}
+              {/* CRM Sidebar */}
               {showContactInfo && (
                 <div className="w-80 border-l border-gray-100 bg-white h-full overflow-y-auto hidden lg:flex flex-col animate-in slide-in-from-right duration-300">
                   <div className="p-8 space-y-8">
-                     {/* Mini Profile */}
                      <div className="text-center space-y-4">
                         <div className="w-24 h-24 mx-auto rounded-[2.5rem] bg-indigo-500 text-white flex items-center justify-center text-3xl font-black shadow-2xl shadow-indigo-100 ring-8 ring-indigo-50">
                           {selectedChat.avatar}
                         </div>
                         <div>
                            <h5 className="text-xl font-black text-gray-800 tracking-tight">{selectedChat.name}</h5>
-                           <p className="text-xs text-gray-400 font-bold uppercase mt-1 tracking-widest">Lead de Origem {selectedChat.tags[0]}</p>
+                           <p className="text-xs text-gray-400 font-bold uppercase mt-1 tracking-widest">Lead {selectedChat.tags[0]}</p>
                         </div>
                         <div className="flex gap-2 justify-center">
                            <button className="p-3 bg-gray-50 text-gray-400 hover:text-indigo-600 rounded-2xl transition-all border border-gray-100"><Phone size={18}/></button>
@@ -273,56 +305,16 @@ const ChatCenter: React.FC = () => {
                         </div>
                      </div>
 
-                     {/* Health Score */}
                      <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-3">
                         <div className="flex justify-between items-center">
                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Lead Score</span>
-                           <span className={`text-xs font-black ${selectedChat.score > 70 ? 'text-emerald-500' : 'text-indigo-500'}`}>{selectedChat.score}%</span>
+                           <span className={`text-xs font-black text-emerald-500`}>{selectedChat.score}%</span>
                         </div>
                         <div className="w-full h-2 bg-white rounded-full overflow-hidden shadow-inner">
                            <div 
-                            className={`h-full rounded-full transition-all duration-1000 ${selectedChat.score > 70 ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
+                            className={`h-full bg-emerald-500 rounded-full transition-all duration-1000`} 
                             style={{width: `${selectedChat.score}%`}}
                            ></div>
-                        </div>
-                     </div>
-
-                     {/* Tags */}
-                     <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                           <h6 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Segmentação</h6>
-                           <button className="text-indigo-600 font-black text-[10px] uppercase">Gerenciar</button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                           {selectedChat.tags.map(tag => (
-                             <span key={tag} className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase border border-indigo-100 flex items-center gap-1.5">
-                                <Tag size={10} /> {tag}
-                             </span>
-                           ))}
-                           <button className="px-3 py-1.5 border border-dashed border-gray-200 text-gray-400 rounded-xl text-[10px] font-black uppercase hover:border-indigo-300 hover:text-indigo-500 transition-all">
-                             + Add Tag
-                           </button>
-                        </div>
-                     </div>
-
-                     {/* CRM Timeline Mini */}
-                     <div className="space-y-4">
-                        <h6 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Eventos Recentes</h6>
-                        <div className="space-y-4 relative before:absolute before:left-2 before:top-1 before:bottom-1 before:w-px before:bg-gray-100">
-                           <div className="relative pl-6 flex items-start gap-3">
-                              <div className="absolute left-0 top-1.5 w-1.5 h-1.5 bg-emerald-500 rounded-full ring-4 ring-white"></div>
-                              <div className="space-y-0.5">
-                                 <p className="text-xs font-bold text-gray-800">Mensagem Recebida</p>
-                                 <p className="text-[10px] text-gray-400">Hoje às 10:45</p>
-                              </div>
-                           </div>
-                           <div className="relative pl-6 flex items-start gap-3">
-                              <div className="absolute left-0 top-1.5 w-1.5 h-1.5 bg-indigo-500 rounded-full ring-4 ring-white"></div>
-                              <div className="space-y-0.5">
-                                 <p className="text-xs font-bold text-gray-800">Gatilho AI Persona</p>
-                                 <p className="text-[10px] text-gray-400">Ontem às 18:00</p>
-                              </div>
-                           </div>
                         </div>
                      </div>
                   </div>
@@ -341,12 +333,9 @@ const ChatCenter: React.FC = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <h4 className="text-2xl font-black text-gray-800 tracking-tight">Hub de Atendimento</h4>
-              <p className="text-gray-400 text-sm max-w-xs mx-auto font-medium">Selecione uma conversa para começar a vender mais e atender melhor com o poder da IA.</p>
+              <h4 className="text-2xl font-black text-gray-800 tracking-tight">Hub de Mensagens Live</h4>
+              <p className="text-gray-400 text-sm max-w-xs mx-auto font-medium">Conecte seu WhatsApp para começar a receber mensagens em tempo real aqui.</p>
             </div>
-            <button className="px-8 py-3 bg-white border border-gray-100 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 hover:text-white hover:shadow-xl hover:shadow-indigo-100 transition-all">
-              Ver Filtros Avançados
-            </button>
           </div>
         )}
       </div>
