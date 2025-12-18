@@ -16,7 +16,7 @@ import {
 } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAa-a8MMECStZgKxxELeLSJT7JpJOKMJZw",
+  apiKey: "AIzaSyA9WZce6FaESU8H9tHcBYL-ACwxOrtbKm4",
   authDomain: "zapflow25.firebaseapp.com",
   projectId: "zapflow25",
   storageBucket: "zapflow25.firebasestorage.app",

@@ -1,11 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  BarChart, Bar, PieChart, Pie, Cell, Legend, ComposedChart
-} from 'recharts';
-import { 
-  Users, Send, CheckCircle, AlertCircle, Clock, MessageSquareText, 
-  ShieldCheck, UserMinus, Globe, Smile, Zap, TrendingUp, Sparkles, RefreshCw, FileText, X
+  Users, Send, MessageSquareText, UserMinus, Sparkles, RefreshCw, FileText, X, AlertTriangle
 } from 'lucide-react';
 import { subscribeToCollection } from '../services/firebase';
 import { Contact, Campaign } from '../types';
@@ -16,6 +12,7 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const SERVER_URL = "http://localhost:8080";
 
@@ -41,17 +38,13 @@ const Dashboard: React.FC = () => {
 
   const handleGenerateAiInsights = async () => {
     setIsGeneratingAi(true);
+    setErrorMsg(null);
     try {
       const stats = {
-        totalSent: campaigns.reduce((acc, c) => acc + c.sent, 0),
-        totalReceived: campaigns.reduce((acc, c) => acc + c.sent, 0),
-        receivedRate: 98,
-        totalDelivered: campaigns.reduce((acc, c) => acc + (c.sent * 0.9), 0),
-        deliveredRate: 90,
-        totalViewed: campaigns.reduce((acc, c) => acc + (c.sent * 0.4), 0),
-        viewedRate: 40,
-        totalFailed: campaigns.reduce((acc, c) => acc + (c.total - c.sent), 0),
-        failureRate: 5
+        totalSent: campaigns.reduce((acc, c) => acc + (c.sent || 0), 0),
+        deliveredRate: 92,
+        viewedRate: 45,
+        totalFailed: campaigns.reduce((acc, c) => acc + ((c.total || 0) - (c.sent || 0)), 0),
       };
 
       const res = await fetch(`${SERVER_URL}/api/ai/insights`, {
@@ -65,29 +58,29 @@ const Dashboard: React.FC = () => {
           filterPeriod: "Últimos 7 dias"
         })
       });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Erro desconhecido no servidor.' }));
+        throw new Error(errorData.error || `Servidor retornou status ${res.status}`);
+      }
+
       const data = await res.json();
-      if (data.success) setAiReport(data.insights);
-    } catch (e) {
+      if (data.success) {
+        setAiReport(data.insights);
+      } else {
+        throw new Error(data.error || "Falha ao processar insights.");
+      }
+    } catch (e: any) {
       console.error("Erro ao gerar insights:", e);
+      if (e.message.includes('Failed to fetch')) {
+        setErrorMsg("Não foi possível conectar ao motor (localhost:8080). Certifique-se de que o Docker está rodando.");
+      } else {
+        setErrorMsg(e.message);
+      }
     } finally {
       setIsGeneratingAi(false);
     }
   };
-
-  const areaData = [
-    { name: 'Seg', sent: 400, received: 240 },
-    { name: 'Ter', sent: 700, received: 539 },
-    { name: 'Qua', sent: 600, received: 980 },
-    { name: 'Qui', sent: 800, received: 690 },
-    { name: 'Sex', sent: 950, received: 880 },
-    { name: 'Sáb', sent: 400, received: 380 },
-    { name: 'Dom', sent: 300, received: 430 },
-  ];
-
-  const automationData = [
-    { name: 'Bot', value: 72, color: '#10B981' },
-    { name: 'Humano', value: 28, color: '#4F46E5' },
-  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
@@ -96,33 +89,38 @@ const Dashboard: React.FC = () => {
           <h2 className="text-2xl font-black text-gray-800 tracking-tight">Executive Intelligence <span className="text-emerald-500 font-black">PRO</span></h2>
           <p className="text-gray-500 text-sm">Monitorando {totalLeads} contatos e {totalCampaigns} campanhas.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col items-end gap-2">
           <button 
             onClick={handleGenerateAiInsights}
             disabled={isGeneratingAi}
             className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg disabled:opacity-50"
           >
             {isGeneratingAi ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            {isGeneratingAi ? 'Gerando Relatório...' : 'Análise Estratégica IA'}
+            {isGeneratingAi ? 'Analisando dados...' : 'Gerar Insights IA'}
           </button>
+          {errorMsg && (
+            <div className="flex items-center gap-2 text-rose-500 text-[10px] font-bold bg-rose-50 px-3 py-1 rounded-lg border border-rose-100 animate-bounce">
+              <AlertTriangle size={12} /> {errorMsg}
+            </div>
+          )}
         </div>
       </header>
 
       {aiReport && (
         <div className="bg-gradient-to-br from-indigo-900 to-slate-900 p-8 rounded-[3rem] shadow-2xl text-white relative overflow-hidden animate-in zoom-in-95 duration-500">
           <div className="absolute top-0 right-0 p-10 opacity-10">
-            <Sparkles size={200} />
+            <Sparkles size={180} />
           </div>
-          <div className="flex justify-between items-start mb-6">
+          <div className="flex justify-between items-start mb-6 relative z-10">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md">
                 <FileText size={24} className="text-indigo-300" />
               </div>
-              <h3 className="text-xl font-black tracking-tight">Relatório Gerencial Gemini IA</h3>
+              <h3 className="text-xl font-black tracking-tight">Relatório Estratégico Gemini IA</h3>
             </div>
             <button onClick={() => setAiReport(null)} className="p-2 hover:bg-white/10 rounded-xl transition-all"><X size={20} /></button>
           </div>
-          <div className="prose prose-invert max-w-none prose-sm leading-relaxed whitespace-pre-wrap font-medium">
+          <div className="prose prose-invert max-w-none prose-sm leading-relaxed whitespace-pre-wrap font-medium relative z-10">
             {aiReport}
           </div>
         </div>
@@ -132,8 +130,8 @@ const Dashboard: React.FC = () => {
         {[
           { label: 'Base de Leads', value: totalLeads, trend: `Live Sync`, up: true, icon: Users, color: 'indigo' },
           { label: 'Campanhas Ativas', value: campaigns.filter(c => c.status === 'Running').length, trend: 'Tempo Real', up: true, icon: Send, color: 'emerald' },
-          { label: 'Conversas Ativas', value: activeLeads, trend: 'WhatsApp', up: true, icon: MessageSquareText, color: 'blue' },
-          { label: 'Leads em Risco', value: riskLeads, trend: 'Ação Urgente', up: false, icon: UserMinus, color: 'rose' },
+          { label: 'Leads Ativos', value: activeLeads, trend: 'Engajados', up: true, icon: MessageSquareText, color: 'blue' },
+          { label: 'Leads em Risco', value: riskLeads, trend: 'Churn Risk', up: false, icon: UserMinus, color: 'rose' },
         ].map((kpi, idx) => (
           <div key={idx} className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 relative group overflow-hidden hover:shadow-xl transition-all">
             <div className="flex justify-between items-start relative z-10">

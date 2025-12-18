@@ -6,8 +6,13 @@ export const generateAiResponse = async (
   persona: string, 
   history: {role: 'user' | 'model', parts: {text: string}[]}[] = []
 ) => {
-  // Always use process.env.API_KEY directly for initialization as per guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey || apiKey === 'undefined') {
+    return "Nota: Para usar a IA diretamente no chat, configure a API_KEY. No momento, o motor backend é recomendado para automações.";
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   try {
     const response = await ai.models.generateContent({
@@ -17,18 +22,14 @@ export const generateAiResponse = async (
         { role: 'user', parts: [{ text: userMessage }] }
       ],
       config: {
-        systemInstruction: `You are an AI assistant representing a brand. 
-        Persona Profile: ${persona}. 
-        Keep responses concise, professional, and helpful. Always respond in Portuguese as the primary language unless the user speaks another.`,
+        systemInstruction: `Persona: ${persona}. Responda em Português, de forma curta e profissional.`,
         temperature: 0.7,
-        topP: 0.9,
       },
     });
 
-    // Access .text property directly instead of calling it as a method
-    return response.text || "Desculpe, não consegui processar sua mensagem agora.";
+    return response.text || "Sem resposta da IA.";
   } catch (error) {
-    console.error("Gemini Error:", error);
-    return "Ocorreu um erro ao falar com a IA.";
+    console.error("Gemini Frontend Error:", error);
+    return "Ocorreu um erro na comunicação com o Gemini.";
   }
 };
