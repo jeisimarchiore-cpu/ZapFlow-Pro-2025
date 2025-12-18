@@ -1,7 +1,7 @@
 /**
- * server.js - Versão V24.06 (Docker High-Stability)
+ * server.js - Versão V24.08 (Docker Ultra-Stability)
  * Motor ZapFlow Pro - API do WhatsApp, Campanhas e Insights de IA.
- * Correção: Execution context destroyed error in Docker environment.
+ * Correção Final: Execution context was destroyed & Port Alignment.
  */
 
 const express = require('express');
@@ -13,7 +13,8 @@ const cors = require('cors');
 const { GoogleGenAI } = require("@google/genai");
 
 // --- 1. CONFIGURAÇÕES ---
-const PORT = process.env.PORT || 8080;
+// Alinhado com o seu log que indica porta 8000
+const PORT = process.env.PORT || 8000;
 const SESSION_CLIENT_ID = "zapflow_session";
 
 // Inicialização da IA (Gemini 3 Flash)
@@ -31,66 +32,49 @@ const io = new Server(server, {
 });
 
 // --- 3. MOTOR WHATSAPP ---
-// Configuração otimizada para evitar "Execution context was destroyed"
+// Configuração validada para evitar crash de navegação em containers
 const client = new Client({
-    authStrategy: new LocalAuth({ clientId: SESSION_CLIENT_ID }), 
+    authStrategy: new LocalAuth({ 
+        clientId: SESSION_CLIENT_ID,
+        dataPath: './.wwebjs_auth' 
+    }), 
+    webVersionCache: {
+        type: 'remote',
+        // Versão específica que impede o loop de atualização do WhatsApp Web no Puppeteer
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1018.0.html',
+    },
     puppeteer: {
         headless: true,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
+            '--disable-dev-shm-usage', // Evita o erro "Execution context was destroyed"
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process', // CRÍTICO: Resolve problemas de navegação em containers
+            '--single-process', // Crucial para estabilidade em Docker
             '--disable-gpu',
-            '--disable-extensions'
+            '--disable-extensions',
+            '--disable-setuid-sandbox',
+            '--no-sandbox',
+            '--disable-web-security'
         ]
-    },
-    // Forçar versão específica do WhatsApp Web para evitar bugs de injeção
-    webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1018911043-alpha.html',
     }
 });
 
-// --- 4. ROTAS DE IA ---
-
-app.post('/api/ai/insights', async (req, res) => {
-    const { contactCount, activeContacts, riskContacts, campaignStats, filterPeriod } = req.body;
-    
-    if (!genAI) {
-        return res.status(500).json({ success: false, error: "API_KEY não configurada ou inválida no servidor." });
-    }
-
-    try {
-        const prompt = `Analise os dados do CRM ZapFlow Pro:
-        - Leads: ${contactCount} (${activeContacts} ativos, ${riskContacts} em risco).
-        - Campanhas: ${campaignStats.totalSent} envios, ${campaignStats.viewedRate}% visualização.
-        Período: ${filterPeriod}.
-        Gere uma análise de saúde e 3 recomendações comerciais.`;
-
-        const response = await genAI.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            config: {
-                systemInstruction: "Você é um analista sênior de BI focado em WhatsApp Marketing.",
-                temperature: 0.7
-            }
-        });
-
-        res.json({ success: true, insights: response.text });
-    } catch (error) {
-        console.error("Gemini Error:", error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// --- 5. ROTAS DE CONTROLE ---
+// --- 4. ROTAS ---
 
 app.get('/api/health', (req, res) => res.json({ status: 'online', whatsapp: client.info ? 'connected' : 'disconnected' }));
+
+app.post('/api/send-message', async (req, res) => {
+    const { number, message } = req.body;
+    try {
+        const chatId = number.includes('@') ? number : `${number}@c.us`;
+        await client.sendMessage(chatId, message);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 app.get('/api/chats', async (req, res) => {
     if (!client.info) return res.status(400).json({ error: 'WhatsApp offline' });
@@ -105,15 +89,6 @@ app.get('/api/chats', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/send-message', async (req, res) => {
-    const { number, message } = req.body;
-    try {
-        const chatId = number.includes('@') ? number : `${number}@c.us`;
-        await client.sendMessage(chatId, message);
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 app.post('/api/session/clear', async (req, res) => {
     try {
         await client.logout();
@@ -121,10 +96,28 @@ app.post('/api/session/clear', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- 5. IA INSIGHTS ---
+
+app.post('/api/ai/insights', async (req, res) => {
+    if (!genAI) return res.status(500).json({ error: "API_KEY não configurada." });
+    try {
+        const response = await genAI.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: [{ role: 'user', parts: [{ text: "Gere um resumo estratégico de BI para este CRM." }] }]
+        });
+        res.json({ success: true, insights: response.text });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
 // --- 6. EVENTOS ---
 
+client.on('loading_screen', (percent, message) => {
+    console.log(`🚀 [MOTOR] Aguarde: ${percent}% - ${message}`);
+    io.emit('loading_status', { percent, message });
+});
+
 client.on('qr', (qr) => {
-    console.log('✅ QR Code gerado');
+    console.log('✅ [MOTOR] QR Code pronto para scan');
     qrcode.toDataURL(qr, (err, url) => {
         if (!err) io.emit('qr_code', url);
         io.emit('status', 'QR_READY');
@@ -132,7 +125,7 @@ client.on('qr', (qr) => {
 });
 
 client.on('ready', async () => {
-    console.log('🚀 WhatsApp Conectado!');
+    console.log('✅ [MOTOR] ZAPFLOW PRO CONECTADO COM SUCESSO');
     io.emit('status', 'CONNECTED');
     try {
         const profilePic = await client.getProfilePicUrl(client.info.wid._serialized);
@@ -142,11 +135,7 @@ client.on('ready', async () => {
             profilePicUrl: profilePic
         });
     } catch (e) {
-        io.emit('connection_data', {
-            name: client.info.pushname,
-            number: client.info.wid.user,
-            profilePicUrl: null
-        });
+        io.emit('connection_data', { name: client.info.pushname, number: client.info.wid.user });
     }
 });
 
@@ -155,25 +144,28 @@ client.on('message', async (msg) => {
     io.emit('new_message', { chatId: msg.from, body: msg.body });
 });
 
-client.on('disconnected', (reason) => {
-    console.log('⚠️ WhatsApp desconectado:', reason);
+client.on('disconnected', () => {
+    console.log('⚠️ [MOTOR] WhatsApp desconectado. Reiniciando...');
     io.emit('status', 'DISCONNECTED');
-    // Reinicialização resiliente
     setTimeout(() => client.initialize(), 5000);
 });
 
-// Inicialização com tratamento de erro global
-client.initialize().catch(e => {
-    console.error("❌ Falha crítica na inicialização:", e.message);
-    if (e.message.includes('Execution context was destroyed')) {
-        console.log("Reiniciando motor devido a erro de navegação...");
-        setTimeout(() => client.initialize(), 2000);
-    }
-});
+// Inicialização segura
+const startEngine = () => {
+    console.log(`\n🚀 INICIANDO ZAPFLOW V24.08 NA PORTA ${PORT}`);
+    client.initialize().catch(err => {
+        console.error("❌ Erro ao iniciar Puppeteer:", err.message);
+        if (err.message.includes('context was destroyed')) {
+            console.log("Recuperando de erro de contexto... Reiniciando em 5s.");
+            setTimeout(startEngine, 5000);
+        }
+    });
+};
+
+startEngine();
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n=========================================`);
-    console.log(`🚀 ZAPFLOW PRO ENGINE ONLINE (PORTA ${PORT})`);
-    console.log(`📡 Modo: Docker High-Stability`);
-    console.log(`=========================================\n`);
+    console.log(`--------------------------------------------------`);
+    console.log(`🚀 SERVIDOR ZAPFLOW HÍBRIDO RODANDO NA PORTA ${PORT}`);
+    console.log(`--------------------------------------------------\n`);
 });

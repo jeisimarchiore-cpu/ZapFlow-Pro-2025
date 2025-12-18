@@ -43,7 +43,8 @@ const ChatCenter: React.FC<ChatCenterProps> = ({ isSocketActive }) => {
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
-  const SERVER_URL = "http://localhost:8080";
+  // Alinhado com a porta 8000 conforme logs e Dockerfile
+  const SERVER_URL = "http://localhost:8000";
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const fetchChats = async () => {
@@ -63,9 +64,13 @@ const ChatCenter: React.FC<ChatCenterProps> = ({ isSocketActive }) => {
   const fetchMessages = async (chatId: string) => {
     setIsLoadingMessages(true);
     try {
+      // Nota: Rota /api/messages/${chatId} deve ser implementada no server.js se necessário
+      // Por enquanto mantemos a estrutura, mas ciente da porta 8000
       const res = await fetch(`${SERVER_URL}/api/messages/${chatId}`);
-      const data = await res.json();
-      if (Array.isArray(data)) setMessages(data);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setMessages(data);
+      }
     } catch (e) {
       console.error("Erro ao carregar mensagens:", e);
     } finally {
@@ -161,7 +166,7 @@ const ChatCenter: React.FC<ChatCenterProps> = ({ isSocketActive }) => {
             <div className="p-8 text-center space-y-3">
               <div className="bg-rose-50 p-4 rounded-3xl border border-rose-100">
                 <Zap size={24} className="mx-auto text-rose-500 mb-2" fill="currentColor" />
-                <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest leading-relaxed">Conecte o WhatsApp (Porta 8080) para carregar chats.</p>
+                <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest leading-relaxed">Conecte o WhatsApp (Porta 8000) para carregar chats.</p>
               </div>
             </div>
           )}
@@ -193,7 +198,7 @@ const ChatCenter: React.FC<ChatCenterProps> = ({ isSocketActive }) => {
                 <div>
                   <h4 className="font-black text-gray-800 text-lg tracking-tight truncate">{selectedChat.name}</h4>
                   <span className={`text-[10px] font-black uppercase tracking-widest ${isSocketActive ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {isSocketActive ? 'Online (8080)' : 'Desconectado'}
+                    {isSocketActive ? 'Online (8000)' : 'Desconectado'}
                   </span>
                 </div>
               </div>
@@ -221,7 +226,7 @@ const ChatCenter: React.FC<ChatCenterProps> = ({ isSocketActive }) => {
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-6">
             <MessageSquare size={56} className="text-gray-200" />
             <h4 className="text-2xl font-black text-gray-800 tracking-tight">Atendimento Ativo</h4>
-            <p className="text-gray-400 text-sm max-w-xs mx-auto font-medium">Selecione um chat para responder em tempo real via porta 8080.</p>
+            <p className="text-gray-400 text-sm max-w-xs mx-auto font-medium">Selecione um chat para responder em tempo real via porta 8000.</p>
           </div>
         )}
       </div>

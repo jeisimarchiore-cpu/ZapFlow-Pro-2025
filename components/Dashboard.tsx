@@ -26,7 +26,8 @@ const Dashboard: React.FC = () => {
     { name: 'Dom', msgs: 1500, leads: 400 },
   ];
 
-  const SERVER_URL = "http://localhost:8080";
+  // Atualizado para 8000 conforme logs
+  const SERVER_URL = "http://localhost:8000";
 
   useEffect(() => {
     const unsubContacts = subscribeToCollection('contacts', (data) => {
@@ -63,7 +64,7 @@ const Dashboard: React.FC = () => {
         })
       });
 
-      if (!res.ok) throw new Error("Motor Offline (localhost:8080)");
+      if (!res.ok) throw new Error("Motor Offline (localhost:8000)");
       const data = await res.json();
       setAiReport(data.insights);
     } catch (e: any) {

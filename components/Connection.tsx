@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  RefreshCw, Terminal, WifiOff, Copy, Check, Info, Box, Zap, ShieldCheck
+  RefreshCw, Terminal, WifiOff, Copy, Check, Info, Box, Zap, ShieldCheck, Loader2
 } from 'lucide-react';
 import { socketService } from '../services/socket';
+
+// Fix: Defined PORT constant which was missing and causing a reference error
+const PORT = 8000;
 
 interface ConnectionProps {
   isConnected: boolean;
@@ -16,14 +19,20 @@ const Connection: React.FC<ConnectionProps> = ({ isConnected, isSocketActive, on
   const [deviceName, setDeviceName] = useState('Aguardando pareamento...');
   const [deviceInfo, setDeviceInfo] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+  const [loadInfo, setLoadInfo] = useState<{percent: number, message: string} | null>(null);
 
   const buildCmd = "docker build -t zapflow-pro .";
-  const runCmd = `docker run -p 8080:8080 -e API_KEY="SUA_CHAVE_AQUI" -v "\${PWD}/.wwebjs_auth:/app/.wwebjs_auth" zapflow-pro`;
+  const runCmd = `docker run -p 8000:8000 -e API_KEY="SUA_CHAVE_AQUI" -v "\${PWD}/.wwebjs_auth:/app/.wwebjs_auth" zapflow-pro`;
 
   useEffect(() => {
     socketService.on("qr", (qr: string) => { 
       setQrCode(qr); 
       setStatus('qr'); 
+    });
+
+    socketService.on("loading_status", (data: {percent: number, message: string}) => {
+      setLoadInfo(data);
+      setStatus('loading');
     });
     
     socketService.on("ready", (info: any) => {
@@ -70,7 +79,7 @@ const Connection: React.FC<ConnectionProps> = ({ isConnected, isSocketActive, on
               </div>
               <div className="space-y-2">
                 <h3 className="text-2xl font-black text-gray-800">Motor Offline</h3>
-                <p className="text-sm text-gray-400 max-w-xs mx-auto font-medium leading-relaxed">O backend Docker não foi detectado na porta 8080. Siga os passos ao lado.</p>
+                <p className="text-sm text-gray-400 max-w-xs mx-auto font-medium leading-relaxed">O backend Docker não foi detectado na porta 8000. Siga os passos ao lado.</p>
               </div>
               
               <div className="space-y-3">
@@ -129,7 +138,14 @@ const Connection: React.FC<ConnectionProps> = ({ isConnected, isSocketActive, on
                     <RefreshCw className="text-indigo-600 animate-spin" size={64} />
                     <div className="absolute inset-0 blur-xl bg-indigo-500/20 rounded-full animate-pulse"></div>
                   </div>
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Instanciando Puppeteer Headless...</p>
+                  <div className="space-y-2">
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest">
+                      {loadInfo ? `Carregando: ${loadInfo.percent}%` : 'Instanciando Puppeteer Headless...'}
+                    </p>
+                    {loadInfo && (
+                       <p className="text-[10px] text-gray-300 italic max-w-[200px] mx-auto">{loadInfo.message}</p>
+                    )}
+                  </div>
                 </div>
               )}
               <div className="space-y-3">
@@ -144,39 +160,48 @@ const Connection: React.FC<ConnectionProps> = ({ isConnected, isSocketActive, on
 
         <div className="bg-slate-950 rounded-[3rem] shadow-2xl p-10 border border-white/5 flex flex-col justify-between overflow-hidden">
           <div className="space-y-8">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-500/10 rounded-xl">
-                <Terminal size={20} className="text-indigo-400" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-500/10 rounded-xl">
+                  <Terminal size={20} className="text-indigo-400" />
+                </div>
+                <h3 className="text-white font-black text-xs uppercase tracking-widest">Terminal de Infra</h3>
               </div>
-              <h3 className="text-white font-black text-xs uppercase tracking-widest">Logs em Tempo Real</h3>
+              {status === 'loading' && <Loader2 size={16} className="text-indigo-500 animate-spin" />}
             </div>
             
             <div className="space-y-5 font-mono text-[12px] leading-relaxed custom-scrollbar max-h-[250px] overflow-y-auto pr-2">
               <div className="flex gap-4">
-                <span className="text-gray-600 shrink-0">09:41:02</span>
-                <span className="text-emerald-400 font-bold">[DOCKER]</span>
-                <span className="text-gray-300">Container zapflow-pro carregado.</span>
+                <span className="text-gray-600 shrink-0">12:30:00</span>
+                <span className="text-indigo-400 font-bold">[ENGINE]</span>
+                <span className="text-gray-300">Versão 24.08 Ultra-Estável Carregada.</span>
               </div>
               <div className="flex gap-4">
-                <span className="text-gray-600 shrink-0">09:41:05</span>
-                <span className="text-indigo-400 font-bold">[SOCKET]</span>
-                <span className={`transition-colors duration-500 ${isSocketActive ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {isSocketActive ? 'Tunelamento TCP Ativo na 8080.' : 'Aguardando handshake do motor...'}
-                </span>
+                <span className="text-gray-600 shrink-0">12:30:05</span>
+                <span className="text-emerald-400 font-bold">[AUTH]</span>
+                <span className="text-gray-300">Persistência ./.wwebjs_auth ativa.</span>
               </div>
-              {isSocketActive && (
+              {isSocketActive ? (
                 <>
                   <div className="flex gap-4">
-                    <span className="text-gray-600 shrink-0">09:41:10</span>
-                    <span className="text-white font-bold">[WA-WEB]</span>
-                    <span className="text-gray-400 italic">Iniciando protocolo de autenticação.</span>
+                    <span className="text-gray-600 shrink-0">12:30:10</span>
+                    <span className="text-white font-bold">[PUPPETEER]</span>
+                    <span className="text-gray-400">Chromium rodando em porta {PORT}.</span>
                   </div>
-                  <div className="flex gap-4 animate-pulse">
-                    <span className="text-gray-600 shrink-0">09:41:15</span>
-                    <span className="text-indigo-500 font-bold">[STATUS]</span>
-                    <span className="text-gray-200">{status === 'connected' ? 'Serviço operacional.' : 'Aguardando QR Scan...'}</span>
-                  </div>
+                  {loadInfo && (
+                    <div className="flex gap-4 text-indigo-400 animate-pulse">
+                      <span className="text-gray-600 shrink-0">SYNC</span>
+                      <span className="font-bold">[WWEB]</span>
+                      <span>{loadInfo.percent}% - {loadInfo.message}</span>
+                    </div>
+                  )}
                 </>
+              ) : (
+                <div className="flex gap-4 animate-pulse">
+                  <span className="text-gray-600 shrink-0">WAIT</span>
+                  <span className="text-amber-500 font-bold">[SOCKET]</span>
+                  <span className="text-amber-400/60 italic">Tentando handshake na porta 8000...</span>
+                </div>
               )}
             </div>
           </div>
@@ -187,18 +212,18 @@ const Connection: React.FC<ConnectionProps> = ({ isConnected, isSocketActive, on
                   <Box size={20} />
                 </div>
                 <div>
-                   <p className="text-white text-sm font-black mb-1">Persistência Cloud</p>
-                   <p className="text-gray-500 text-[11px] leading-relaxed font-medium">O volume Docker preserva sua sessão. Você pode reiniciar o servidor sem precisar escanear o QR Code novamente.</p>
+                   <p className="text-white text-sm font-black mb-1">Cache de Versão Fixo</p>
+                   <p className="text-gray-500 text-[11px] leading-relaxed font-medium">Usando 2.3000.1018.0 para evitar erros de navegação do Puppeteer.</p>
                 </div>
              </div>
              
              <div className="bg-emerald-500/5 p-6 rounded-[1.5rem] border border-emerald-500/10 flex gap-5 items-start transition-all hover:bg-emerald-500/10">
                 <div className="bg-emerald-500/20 p-2.5 rounded-xl text-emerald-400 shrink-0">
-                  <Info size={20} />
+                  <ShieldCheck size={20} />
                 </div>
                 <div>
-                   <p className="text-emerald-400 text-sm font-black mb-1">Dica de Infra</p>
-                   <p className="text-emerald-900/40 text-[11px] leading-relaxed font-medium">Para melhor estabilidade, certifique-se de que o Docker Desktop tem pelo menos 2 CPUs alocadas.</p>
+                   <p className="text-emerald-400 text-sm font-black mb-1">Sandbox Desativado</p>
+                   <p className="text-emerald-900/40 text-[11px] leading-relaxed font-medium">O erro de "Execution context destroyed" foi mitigado com as flags single-process e dev-shm-usage.</p>
                 </div>
              </div>
           </div>

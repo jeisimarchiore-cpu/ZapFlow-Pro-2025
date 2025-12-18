@@ -22,7 +22,8 @@ const Campaigns: React.FC<CampaignsProps> = ({ isSocketActive }) => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  const SERVER_URL = "http://localhost:8080";
+  // Alinhado com a porta 8000 conforme logs e Dockerfile
+  const SERVER_URL = "http://localhost:8000";
 
   useEffect(() => {
     const unsub = subscribeToCollection('campaigns', (data) => {

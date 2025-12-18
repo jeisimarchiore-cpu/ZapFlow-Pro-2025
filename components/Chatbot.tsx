@@ -10,16 +10,19 @@ const Chatbot: React.FC = () => {
   const [aiConfig, setAiConfig] = useState({ persona: '', fallback: true });
   const [isSyncing, setIsSyncing] = useState(true);
 
-  const SERVER_URL = "http://localhost:8080";
+  // Alinhado com a porta 8000 conforme logs e Dockerfile
+  const SERVER_URL = "http://localhost:8000";
 
   useEffect(() => {
     const unsub = subscribeToCollection('chatbot_rules', (data) => {
       setRules(data);
-      fetch(`${SERVER_URL}/api/chatbot/rules`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rules: data.map(r => ({ trigger: r.trigger, response: r.response, active: true, exactMatch: r.match === 'Exato' })) })
-      });
+      if (data.length > 0) {
+        fetch(`${SERVER_URL}/api/chatbot/rules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rules: data.map(r => ({ trigger: r.trigger, response: r.response, active: true, exactMatch: r.match === 'Exato' })) })
+        }).catch(err => console.debug("Server not ready for rules sync"));
+      }
     });
     return () => unsub();
   }, []);
@@ -37,7 +40,7 @@ const Chatbot: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ systemPrompt: data.persona, isAiEnabled: data.isEnabled })
-        });
+        }).catch(err => console.debug("Server not ready for config sync"));
       }
       setIsSyncing(false);
     };
@@ -50,14 +53,18 @@ const Chatbot: React.FC = () => {
     const docRef = getDocumentRef('chatbot_config', 'main');
     await setDoc(docRef, configToSave);
     
-    await fetch(`${SERVER_URL}/api/chatbot/config`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ systemPrompt: aiConfig.persona, isAiEnabled: isEnabled })
-    });
+    try {
+      await fetch(`${SERVER_URL}/api/chatbot/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt: aiConfig.persona, isAiEnabled: isEnabled })
+      });
+      alert('Motor de IA atualizado no servidor!');
+    } catch (e) {
+      console.error("Erro ao sincronizar com servidor:", e);
+    }
 
     setIsSyncing(false);
-    alert('Motor de IA atualizado no servidor!');
   };
 
   const handleAddRule = async () => {
@@ -73,7 +80,7 @@ const Chatbot: React.FC = () => {
       <header className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-black text-gray-800 tracking-tight">Híbrido IA & Regras</h2>
-          <p className="text-gray-500 text-sm">Controle central do motor de atendimento.</p>
+          <p className="text-gray-500 text-sm">Controle central do motor de atendimento (Porta 8000).</p>
         </div>
         <div className="flex items-center gap-4">
           <button 

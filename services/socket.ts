@@ -1,6 +1,7 @@
 import { io, Socket } from "socket.io-client";
 
-const SOCKET_URL = "http://localhost:8080"; 
+// Alinhado com a porta 8000 definida no backend Docker
+const SOCKET_URL = "http://localhost:8000"; 
 
 class SocketService {
   public socket: Socket | null = null;
@@ -22,7 +23,7 @@ class SocketService {
     });
 
     this.socket.on("connect", () => {
-      this.addLog("✅ Conexão estabelecida com o motor (Porta 8080).");
+      this.addLog("✅ Conexão estabelecida com o motor (Porta 8000).");
       this.emitInternal("socket_status", "connected");
       this.socket?.emit("request_qr");
     });
@@ -30,6 +31,10 @@ class SocketService {
     this.socket.on("qr_code", (qr: string) => {
       this.addLog("📸 QR Code gerado pelo motor.");
       this.emitInternal("qr", qr);
+    });
+
+    this.socket.on("loading_status", (data: any) => {
+      this.emitInternal("loading_status", data);
     });
 
     this.socket.on("status", (s: string) => {
@@ -43,7 +48,7 @@ class SocketService {
     });
 
     this.socket.on("connect_error", (err) => {
-      this.addLog(`❌ Erro de rede: ${err.message}. Verifique se o Docker está rodando na porta 8080.`);
+      this.addLog(`❌ Erro de rede: ${err.message}. Verifique se o Docker está rodando na porta 8000.`);
       this.emitInternal("socket_status", "disconnected");
     });
 
